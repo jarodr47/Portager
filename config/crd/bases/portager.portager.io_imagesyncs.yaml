@@ -1,0 +1,231 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: imagesyncs.portager.portager.io
+spec:
+  group: portager.portager.io
+  names:
+    kind: ImageSync
+    listKind: ImageSyncList
+    plural: imagesyncs
+    singular: imagesync
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ImageSync is the Schema for the imagesyncs API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of ImageSync
+            properties:
+              destination:
+                description: destination defines the registry to push images to.
+                properties:
+                  auth:
+                    description: auth configures how the controller authenticates
+                      to push images.
+                    properties:
+                      method:
+                        description: |-
+                          method specifies the authentication strategy.
+                          "secret" uses a dockerconfigjson Secret; "ecr" uses IRSA for AWS ECR.
+                        enum:
+                        - secret
+                        - ecr
+                        type: string
+                      secretRef:
+                        description: |-
+                          secretRef references a kubernetes.io/dockerconfigjson Secret.
+                          Required when method is "secret".
+                        properties:
+                          name:
+                            description: name of the Secret
+                            type: string
+                          namespace:
+                            description: namespace of the Secret. Defaults to the
+                              ImageSync's namespace if omitted.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - method
+                    type: object
+                  registry:
+                    description: |-
+                      registry is the destination registry host
+                      (e.g., "123456789012.dkr.ecr.us-gov-west-1.amazonaws.com").
+                    type: string
+                  repositoryPrefix:
+                    description: |-
+                      repositoryPrefix is prepended to image names in the destination.
+                      For example, with prefix "chainguard", image "go" becomes "chainguard/go".
+                    type: string
+                required:
+                - auth
+                - registry
+                type: object
+              images:
+                description: images is the list of images to sync from source to destination.
+                items:
+                  description: ImageSpec defines a single image to sync, including
+                    which tags to copy.
+                  properties:
+                    name:
+                      description: |-
+                        name is the image name relative to the source registry
+                        (e.g., "go", "node", "python").
+                      type: string
+                    tags:
+                      description: tags is the list of image tags to sync (e.g., ["latest",
+                        "1.22"]).
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                  required:
+                  - name
+                  - tags
+                  type: object
+                minItems: 1
+                type: array
+              schedule:
+                description: |-
+                  schedule is a cron expression or shorthand (e.g., "0 */6 * * *", "@every 1h")
+                  controlling how often images are synced.
+                type: string
+              source:
+                description: source defines the registry to pull images from.
+                properties:
+                  authSecretRef:
+                    description: |-
+                      authSecretRef references a kubernetes.io/dockerconfigjson Secret for pull authentication.
+                      Omit for public registries.
+                    properties:
+                      name:
+                        description: name of the Secret
+                        type: string
+                      namespace:
+                        description: namespace of the Secret. Defaults to the ImageSync's
+                          namespace if omitted.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  registry:
+                    description: |-
+                      registry is the source registry host (e.g., "cgr.dev/my-org", "docker.io/library").
+                      No scheme — just the host and optional path prefix.
+                    type: string
+                required:
+                - registry
+                type: object
+            required:
+            - destination
+            - images
+            - schedule
+            - source
+            type: object
+          status:
+            description: status defines the observed state of ImageSync
+            properties:
+              conditions:
+                description: conditions represent the current state of the ImageSync
+                  resource.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastSyncTime:
+                description: lastSyncTime is the timestamp of the most recent sync
+                  attempt.
+                format: date-time
+                type: string
+              nextSyncTime:
+                description: nextSyncTime is the calculated time of the next scheduled
+                  sync.
+                format: date-time
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

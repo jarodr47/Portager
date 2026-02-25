@@ -1,0 +1,26 @@
+apiVersion: portager.portager.io/v1alpha1
+kind: ImageSync
+metadata:
+  labels:
+    app.kubernetes.io/name: portage
+    app.kubernetes.io/managed-by: kustomize
+  name: imagesync-sample
+  namespace: default
+spec:
+  schedule: "@every 1h"
+  source:
+    registry: docker.io/library
+  destination:
+    registry: localhost:5000
+    auth:
+      method: secret
+      secretRef:
+        name: local-registry-creds
+  images:
+    - name: alpine
+      tags:
+        - "latest"
+    - name: nginx
+      tags:
+        - "latest"
+        - "1.25"

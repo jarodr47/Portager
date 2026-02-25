@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- portager_v1alpha1_imagesync.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

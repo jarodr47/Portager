@@ -140,7 +140,6 @@ type ImageSyncStatusImage struct {
 	Tags []TagSyncStatus `json:"tags,omitempty"`
 }
 
-
 // ImageSyncStatus defines the observed state of ImageSync.
 type ImageSyncStatus struct {
 	// lastSyncTime is the timestamp of the most recent sync attempt.

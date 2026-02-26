@@ -22,7 +22,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,11 +40,18 @@ var _ = Describe("ImageSync Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		imagesync := &portagerv1alpha1.ImageSync{}
 
+		// FakeRecorder captures Kubernetes Events in a Go channel instead
+		// of writing them to the API server. The buffer size (100) is generous
+		// so tests don't block if we emit many events.
+		var fakeRecorder *record.FakeRecorder
+
 		BeforeEach(func() {
+			fakeRecorder = record.NewFakeRecorder(100)
+
 			By("creating the custom resource for the Kind ImageSync")
 			err := k8sClient.Get(ctx, typeNamespacedName, imagesync)
 			if err != nil && errors.IsNotFound(err) {
@@ -51,14 +60,32 @@ var _ = Describe("ImageSync Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: portagerv1alpha1.ImageSyncSpec{
+						Schedule: "@every 1h",
+						Source: portagerv1alpha1.SourceConfig{
+							// Use a fake unreachable registry so GetDigest fails fast
+							// instead of making real network calls to Docker Hub.
+							Registry: "fake-registry.invalid",
+						},
+						Destination: portagerv1alpha1.DestinationConfig{
+							Registry: "localhost:5000",
+							Auth: portagerv1alpha1.AuthConfig{
+								Method: "secret",
+							},
+						},
+						Images: []portagerv1alpha1.ImageSpec{
+							{
+								Name: "alpine",
+								Tags: []string{"latest"},
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &portagerv1alpha1.ImageSync{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -66,19 +93,59 @@ var _ = Describe("ImageSync Controller", func() {
 			By("Cleanup the specific resource instance ImageSync")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
-		It("should successfully reconcile the resource", func() {
+
+		It("should reconcile and update status with failure when registries are unreachable", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &ImageSyncReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: fakeRecorder,
 			}
 
+			// In envtest there are no real registries, so the digest check will fail.
+			// The reconciler should handle this gracefully: update status with
+			// the failure condition, then return an error for requeue.
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
-			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+			Expect(err).To(HaveOccurred())
+
+			// Re-fetch the resource to see the updated status.
+			Expect(k8sClient.Get(ctx, typeNamespacedName, imagesync)).To(Succeed())
+
+			// Verify status was updated despite the copy failure.
+			Expect(imagesync.Status.LastSyncTime).NotTo(BeNil())
+
+			// Verify Ready condition is False with SyncFailed reason.
+			readyCond := meta.FindStatusCondition(imagesync.Status.Conditions, "Ready")
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCond.Reason).To(Equal("SyncFailed"))
+
+			// Verify Syncing condition is False (sync is complete).
+			syncingCond := meta.FindStatusCondition(imagesync.Status.Conditions, "Syncing")
+			Expect(syncingCond).NotTo(BeNil())
+			Expect(syncingCond.Status).To(Equal(metav1.ConditionFalse))
+
+			// Verify per-image status was populated.
+			Expect(imagesync.Status.Images).To(HaveLen(1))
+			Expect(imagesync.Status.Images[0].Name).To(Equal("alpine"))
+			Expect(imagesync.Status.Images[0].Tags).To(HaveLen(1))
+			Expect(imagesync.Status.Images[0].Tags[0].Tag).To(Equal("latest"))
+			Expect(imagesync.Status.Images[0].Tags[0].Synced).To(BeFalse())
+			// With a fake registry, the error should mention the source digest failure.
+			Expect(imagesync.Status.Images[0].Tags[0].Error).To(ContainSubstring("failed to get source digest"))
+
+			// Verify summary counts.
+			Expect(imagesync.Status.TotalImages).To(Equal(1))
+			Expect(imagesync.Status.FailedImages).To(Equal(1))
+			Expect(imagesync.Status.SyncedImages).To(Equal(0))
+
+			// Verify events were emitted.
+			// Receive() reads one item from the channel and checks it against the matcher.
+			// ContainSubstring matches if the event string contains the expected text.
+			Expect(fakeRecorder.Events).To(Receive(ContainSubstring("SyncFailed")))
+			Expect(fakeRecorder.Events).To(Receive(ContainSubstring("SyncComplete")))
 		})
 	})
 })

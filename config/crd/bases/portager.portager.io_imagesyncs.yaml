@@ -211,6 +211,56 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              failedImages:
+                description: failedImages is the number of image+tag combinations
+                  that failed to sync.
+                type: integer
+              images:
+                description: images contains per-image sync status details.
+                items:
+                  description: ImageSyncStatusImage records the sync status for all
+                    tags of a single image.
+                  properties:
+                    name:
+                      description: name is the image name (e.g., "alpine", "go").
+                      type: string
+                    tags:
+                      description: tags contains per-tag sync results.
+                      items:
+                        description: TagSyncStatus records the result of syncing a
+                          single image tag.
+                        properties:
+                          error:
+                            description: error contains the failure reason if synced
+                              is false.
+                            type: string
+                          lastSyncTime:
+                            description: lastSyncTime is when this specific tag was
+                              last synced.
+                            format: date-time
+                            type: string
+                          sourceDigest:
+                            description: |-
+                              sourceDigest is the manifest digest of the source image (e.g., "sha256:abc123...").
+                              Used for digest comparison to skip already-synced images.
+                            type: string
+                          synced:
+                            description: synced indicates whether this tag was successfully
+                              copied.
+                            type: boolean
+                          tag:
+                            description: tag is the image tag that was synced (e.g.,
+                              "latest", "1.22").
+                            type: string
+                        required:
+                        - synced
+                        - tag
+                        type: object
+                      type: array
+                  required:
+                  - name
+                  type: object
+                type: array
               lastSyncTime:
                 description: lastSyncTime is the timestamp of the most recent sync
                   attempt.
@@ -221,6 +271,14 @@ spec:
                   sync.
                 format: date-time
                 type: string
+              syncedImages:
+                description: syncedImages is the number of image+tag combinations
+                  successfully synced or already up-to-date.
+                type: integer
+              totalImages:
+                description: totalImages is the total number of image+tag combinations
+                  to sync.
+                type: integer
             type: object
         required:
         - spec

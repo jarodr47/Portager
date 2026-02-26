@@ -11,16 +11,12 @@ spec:
   source:
     registry: docker.io/library
   destination:
-    registry: localhost:5000
+    registry: localhost:5001
     auth:
       method: secret
-      secretRef:
-        name: local-registry-creds
+      # No secretRef — local registry has no auth.
+      # The controller falls through to anonymous when secretRef is nil.
   images:
     - name: alpine
       tags:
         - "latest"
-    - name: nginx
-      tags:
-        - "latest"
-        - "1.25"

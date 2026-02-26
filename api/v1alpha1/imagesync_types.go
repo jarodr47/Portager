@@ -109,6 +109,38 @@ type ImageSyncSpec struct {
 	Images []ImageSpec `json:"images"`
 }
 
+// TagSyncStatus records the result of syncing a single image tag.
+type TagSyncStatus struct {
+	// tag is the image tag that was synced (e.g., "latest", "1.22").
+	Tag string `json:"tag"`
+
+	// synced indicates whether this tag was successfully copied.
+	Synced bool `json:"synced"`
+
+	// sourceDigest is the manifest digest of the source image (e.g., "sha256:abc123...").
+	// Used for digest comparison to skip already-synced images.
+	// +optional
+	SourceDigest string `json:"sourceDigest,omitempty"`
+
+	// lastSyncTime is when this specific tag was last synced.
+	// +optional
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+
+	// error contains the failure reason if synced is false.
+	// +optional
+	Error string `json:"error,omitempty"`
+}
+
+// ImageSyncStatusImage records the sync status for all tags of a single image.
+type ImageSyncStatusImage struct {
+	// name is the image name (e.g., "alpine", "go").
+	Name string `json:"name"`
+
+	// tags contains per-tag sync results.
+	Tags []TagSyncStatus `json:"tags,omitempty"`
+}
+
+
 // ImageSyncStatus defines the observed state of ImageSync.
 type ImageSyncStatus struct {
 	// lastSyncTime is the timestamp of the most recent sync attempt.
@@ -124,6 +156,22 @@ type ImageSyncStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// images contains per-image sync status details.
+	// +optional
+	Images []ImageSyncStatusImage `json:"images,omitempty"`
+
+	// totalImages is the total number of image+tag combinations to sync.
+	// +optional
+	TotalImages int `json:"totalImages,omitempty"`
+
+	// syncedImages is the number of image+tag combinations successfully synced or already up-to-date.
+	// +optional
+	SyncedImages int `json:"syncedImages,omitempty"`
+
+	// failedImages is the number of image+tag combinations that failed to sync.
+	// +optional
+	FailedImages int `json:"failedImages,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -62,7 +62,13 @@ Portager fills this gap with a Kubernetes-native, GitOps-friendly approach that 
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace
+  --version 0.1.0 -n portage-system --create-namespace
+```
+
+To install a specific version, set `--version`. To see available versions:
+
+```bash
+helm show all oci://ghcr.io/jarodr47/portager/charts/portager
 ```
 
 Or from a local clone:
@@ -70,7 +76,8 @@ Or from a local clone:
 ```bash
 git clone https://github.com/jarodr47/portager.git
 cd portager
-helm install portager helm/portager/ -n portage-system --create-namespace
+helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portage-system --create-namespace
 ```
 
 ### Install with Kustomize
@@ -177,7 +184,8 @@ eksctl create iamserviceaccount \
   --approve
 
 # 3. Install with the IRSA annotation
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portage-system --create-namespace \
   --set serviceAccount.create=false \
   --set serviceAccount.name=portager
 ```
@@ -185,7 +193,8 @@ helm install portager helm/portager/ -n portage-system --create-namespace \
 Or let Helm create the ServiceAccount with the annotation:
 
 ```bash
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portage-system --create-namespace \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::123456789012:role/portager-ecr-role
 ```
 
@@ -194,7 +203,8 @@ helm install portager helm/portager/ -n portage-system --create-namespace \
 **Option A: Inline credentials via Helm values**
 
 ```bash
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portage-system --create-namespace \
   --set aws.credentials.enabled=true \
   --set aws.credentials.accessKeyId=AKIAIOSFODNN7EXAMPLE \
   --set aws.credentials.secretAccessKey=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
@@ -209,7 +219,8 @@ kubectl create secret generic aws-creds -n portage-system \
   --from-literal=AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
   --from-literal=AWS_REGION=us-east-1
 
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portage-system --create-namespace \
   --set aws.existingSecret=aws-creds
 ```
 
@@ -295,7 +306,8 @@ Standard controller-runtime metrics (`controller_runtime_reconcile_total`, `work
 **With Prometheus Operator (ServiceMonitor):**
 
 ```bash
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portage-system --create-namespace \
   --set metrics.serviceMonitor.enabled=true
 ```
 

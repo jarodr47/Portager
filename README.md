@@ -9,27 +9,47 @@
 </p>
 
 <p align="center">
-  <a href="#installation">Installation</a> &bull;
   <a href="#quick-start">Quick Start</a> &bull;
-  <a href="#configuration">Configuration</a> &bull;
-  <a href="#metrics">Metrics</a> &bull;
-  <a href="docs/DEPLOY_README.md">Deploy Guide</a>
+  <a href="docs/CONFIGURATION.md">Configuration</a> &bull;
+  <a href="docs/DEPLOY_README.md">Deploy Guide</a> &bull;
+  <a href="docs/CONFIGURATION.md#metrics">Metrics</a>
 </p>
 
 ---
 
-Portager is a Kubernetes operator that declaratively syncs container images between OCI-compliant registries. Define an `ImageSync` custom resource specifying source images, a destination registry, a cron schedule, and authentication -- the operator handles the rest.
+Portager is a Kubernetes operator that declaratively syncs container images between OCI-compliant registries. Define an `ImageSync` custom resource specifying source images, a destination registry, a cron schedule, and authentication — the operator handles the rest.
 
 The name comes from the act of carrying cargo between two bodies of water, which is exactly what this does: carrying container images between two registries.
 
+## How It Works
+
+You create an `ImageSync` CR. The operator compares source and destination digests on your cron schedule, copies only what's changed, and reports status back on the resource. No pipelines, no scripts — just a CRD and a controller.
+
+```
+                    ┌──────────────┐
+                    │  ImageSync   │
+                    │     CRD      │
+                    └──────┬───────┘
+                           │
+                           ▼
+  ┌─────────┐     ┌────────────────┐     ┌─────────┐
+  │  Source │────▶│   Portager     │────▶│  Dest   │
+  │ Registry│     │  Controller    │     │ Registry│
+  └─────────┘     └────────────────┘     └─────────┘
+   Docker Hub      Digest compare         ECR
+   GHCR            Copy if changed        GCR
+   Chainguard      Skip if matching       Harbor
+   Quay            Update status          Nexus
+```
+
 ## Why Portager
 
-There is no CRD-native operator in the CNCF/Kubernetes ecosystem for declarative registry-to-registry image relocation. The existing alternatives each fall short:
+There is no CRD-native operator in the Kubernetes ecosystem for declarative registry-to-registry image relocation. The existing alternatives each fall short:
 
 | Alternative | Limitation |
 |---|---|
 | **ECR pull-through cache** | AWS-only, no support for arbitrary private registries (e.g., Chainguard `cgr.dev`), unavailable in GovCloud |
-| **dregsy** | Config-file driven, not CRD-driven -- no `kubectl get imagesync` |
+| **dregsy** | Config-file driven, not CRD-driven — no `kubectl get imagesync` |
 | **kube-image-keeper (kuik)** | Caches to an in-cluster registry only; does not push to external registries |
 | **Flux image automation** | Watches for new tags and updates Git manifests; does not copy images |
 | **CI/CD pipelines** | Couples relocation to CI availability; no Kubernetes-native status reporting |
@@ -38,49 +58,29 @@ Portager fills this gap with a Kubernetes-native, GitOps-friendly approach that 
 
 ## Features
 
-- **Declarative** -- Define image sync rules as Kubernetes custom resources
-- **Digest-based skip** -- Compares manifest digests via HTTP HEAD; skips unchanged images without downloading layers
-- **Registry-agnostic** -- Works with Docker Hub, GHCR, Quay, Chainguard, ECR, GCR, Harbor, Nexus, and any OCI-compliant registry
-- **Pluggable auth** -- Kubernetes Secrets (`dockerconfigjson`), ECR via IRSA, or anonymous for public registries
-- **Auto-create ECR repos** -- Opt-in via `createDestinationRepos: true`
-- **Cron scheduling** -- Standard cron expressions and shorthands like `@every 6h`
-- **On-demand sync** -- Annotate with `portager.portager.io/sync-now=true` to trigger immediately
-- **Per-image status** -- Digests, timestamps, errors, and summary counts on every `ImageSync` resource
-- **Kubernetes Events** -- `RepoEnsured`, `ImageSynced`, `ImageSkipped`, `SyncFailed`, `SyncComplete`
-- **Prometheus metrics** -- Custom `portage_*` counters, histograms, and gauges on the built-in metrics endpoint
-- **Leader election** -- Safe for multi-replica HA deployments
-- **Helm chart** -- One-command install with configurable AWS credentials, IRSA annotations, and Prometheus ServiceMonitor
+- **Declarative** — Define image sync rules as Kubernetes custom resources
+- **Digest-based skip** — Compares manifest digests via HTTP HEAD; skips unchanged images without downloading layers
+- **Registry-agnostic** — Works with Docker Hub, GHCR, Quay, Chainguard, ECR, GCR, Harbor, Nexus, and any OCI-compliant registry
+- **Pluggable auth** — Kubernetes Secrets (`dockerconfigjson`), ECR via IRSA, or anonymous for public registries
+- **Cron scheduling** — Standard cron expressions, shorthands like `@every 6h`, and on-demand sync via annotation
+- **Observable** — Per-image status on the resource, Kubernetes Events, and custom Prometheus metrics
 
 ## Installation
 
 ### Prerequisites
 
 - Kubernetes 1.28+
-- [Helm](https://helm.sh/) v3+ (recommended) or [Kustomize](https://kustomize.io/)
+- [Helm](https://helm.sh/) v3+
 
-### Install with Helm (recommended)
+### Install with Helm
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
   --version 0.1.0 -n portage-system --create-namespace
 ```
 
-To install a specific version, set `--version`. To see available versions:
-
-```bash
-helm show all oci://ghcr.io/jarodr47/portager/charts/portager
-```
-
-Or from a local clone:
-
-```bash
-git clone https://github.com/jarodr47/portager.git
-cd portager
-helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace
-```
-
-### Install with Kustomize
+<details>
+<summary>Install with Kustomize</summary>
 
 ```bash
 git clone https://github.com/jarodr47/portager.git
@@ -88,6 +88,7 @@ cd portager
 make install   # Install CRDs
 make deploy    # Deploy controller + RBAC
 ```
+</details>
 
 ### Verify
 
@@ -99,9 +100,8 @@ kubectl get pods -n portage-system
 
 ## Quick Start
 
-### Example: Docker Hub to ECR
-
 ```yaml
+# base-images.yaml
 apiVersion: portager.portager.io/v1alpha1
 kind: ImageSync
 metadata:
@@ -126,287 +126,51 @@ spec:
 
 ```bash
 kubectl apply -f base-images.yaml
-
-# Watch progress
 kubectl describe imagesync base-images
-# Events:
-#   RepoEnsured  - ECR repository "mirror/alpine" exists or was created
-#   ImageSynced  - Synced docker.io/library/alpine:3.21 -> ECR (digest: sha256:c3f8e73f)
-#   SyncComplete - Sync complete: 4 synced, 0 failed, 4 total
-
-# Trigger an immediate re-sync (bypasses schedule)
-kubectl annotate imagesync base-images portager.portager.io/sync-now=true
 ```
 
-See the [Deploy Guide](docs/DEPLOY_README.md) for full walkthroughs including EKS with IRSA, non-EKS with IAM credentials, private source registries, and more.
-
-## Configuration
-
-### Helm Values
-
-| Parameter | Default | Description |
-|---|---|---|
-| `image.repository` | `ghcr.io/jarodr47/portager` | Controller image repository |
-| `image.tag` | Chart `appVersion` | Controller image tag |
-| `image.pullPolicy` | `IfNotPresent` | Image pull policy |
-| `replicaCount` | `1` | Number of controller replicas |
-| `resources.limits.cpu` | `500m` | CPU limit |
-| `resources.limits.memory` | `128Mi` | Memory limit |
-| `resources.requests.cpu` | `10m` | CPU request |
-| `resources.requests.memory` | `64Mi` | Memory request |
-| `leaderElection.enabled` | `true` | Enable leader election (required for multi-replica) |
-| `metrics.enabled` | `true` | Enable Prometheus metrics endpoint on `:8443` |
-| `metrics.serviceMonitor.enabled` | `false` | Create a Prometheus `ServiceMonitor` (requires Prometheus Operator) |
-| `serviceAccount.create` | `true` | Create a ServiceAccount |
-| `serviceAccount.name` | `""` | Override ServiceAccount name (defaults to release fullname) |
-| `serviceAccount.annotations` | `{}` | Annotations (e.g., `eks.amazonaws.com/role-arn` for IRSA) |
-| `aws.credentials.enabled` | `false` | Inject AWS credentials as env vars (for non-EKS clusters) |
-| `aws.credentials.accessKeyId` | `""` | AWS access key ID |
-| `aws.credentials.secretAccessKey` | `""` | AWS secret access key |
-| `aws.credentials.region` | `us-east-1` | AWS region |
-| `aws.existingSecret` | `""` | Name of an existing Secret containing AWS credentials |
-
-### AWS Credential Strategies
-
-#### EKS with IRSA (recommended for production)
-
-IRSA (IAM Roles for Service Accounts) provides short-lived, automatically rotated credentials with no secrets stored in the cluster.
-
-```bash
-# 1. Create IAM policy (see docs/DEPLOY_README.md for the full policy JSON)
-aws iam create-policy --policy-name PortagerECRPolicy --policy-document file://policy.json
-
-# 2. Create IRSA service account
-eksctl create iamserviceaccount \
-  --name portager --namespace portage-system \
-  --cluster my-cluster \
-  --attach-policy-arn arn:aws:iam::123456789012:policy/PortagerECRPolicy \
-  --approve
-
-# 3. Install with the IRSA annotation
-helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
-  --set serviceAccount.create=false \
-  --set serviceAccount.name=portager
+```
+Events:
+  Type    Reason        Message
+  ----    ------        -------
+  Normal  RepoEnsured   ECR repository "mirror/alpine" exists or was created
+  Normal  ImageSynced   Synced docker.io/library/alpine:3.21 -> ECR (digest: sha256:c3f8e73f)
+  Normal  SyncComplete  Sync complete: 4 synced, 0 failed, 4 total
 ```
 
-Or let Helm create the ServiceAccount with the annotation:
+For full deployment walkthroughs — including EKS with IRSA, non-EKS clusters, and private source registries — see the **[Deploy Guide](docs/DEPLOY_README.md)**.
 
-```bash
-helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
-  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::123456789012:role/portager-ecr-role
-```
-
-#### Non-EKS clusters (Kind, minikube, self-managed, GKE, AKS)
-
-**Option A: Inline credentials via Helm values**
-
-```bash
-helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
-  --set aws.credentials.enabled=true \
-  --set aws.credentials.accessKeyId=AKIAIOSFODNN7EXAMPLE \
-  --set aws.credentials.secretAccessKey=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
-  --set aws.credentials.region=us-east-1
-```
-
-**Option B: Existing Kubernetes Secret**
-
-```bash
-kubectl create secret generic aws-creds -n portage-system \
-  --from-literal=AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
-  --from-literal=AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
-  --from-literal=AWS_REGION=us-east-1
-
-helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
-  --set aws.existingSecret=aws-creds
-```
-
-**Option C: Inject after install (useful for SSO/session tokens)**
-
-```bash
-helm install portager helm/portager/ -n portage-system --create-namespace
-
-eval "$(aws configure export-credentials --format env)"
-kubectl set env deployment/portager-controller-manager -n portage-system \
-  AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  AWS_SESSION_TOKEN="$AWS_SESSION_TOKEN" \
-  AWS_REGION=us-east-1
-```
-
-### Authentication
-
-Portager supports multiple authentication strategies through a pluggable interface:
-
-| Method | Use Case | Configuration |
-|---|---|---|
-| **Anonymous** | Public registries (Docker Hub, Quay, GHCR public) | Omit auth fields |
-| **Kubernetes Secret** | Any registry with username/password or token auth | `spec.source.authSecretRef` or `spec.destination.auth.secretRef` referencing a `kubernetes.io/dockerconfigjson` Secret |
-| **ECR (IRSA / IAM)** | Amazon ECR | `spec.destination.auth.method: ecr` -- uses the AWS credential chain (IRSA, env vars, instance profile) |
-
-### ImageSync Spec Reference
-
-```yaml
-apiVersion: portager.portager.io/v1alpha1
-kind: ImageSync
-metadata:
-  name: my-sync
-spec:
-  schedule: "0 */6 * * *"          # Cron expression or @every shorthand
-  source:
-    registry: cgr.dev/my-org       # Source registry
-    authSecretRef:                  # Optional: for private source registries
-      name: source-creds
-      namespace: default           # Optional: defaults to ImageSync namespace
-  destination:
-    registry: 123456789012.dkr.ecr.us-east-1.amazonaws.com
-    auth:
-      method: ecr                  # "ecr" or "secret"
-      secretRef:                   # Required when method is "secret"
-        name: dest-creds
-    repositoryPrefix: mirror       # Optional: images land under mirror/<name>
-  createDestinationRepos: true     # Optional: auto-create ECR repos
-  images:
-    - name: go
-      tags: ["latest", "1.22"]
-    - name: python
-      tags: ["latest", "3.12"]
-```
-
-### Schedule Examples
-
-| Expression | Meaning |
-|---|---|
-| `@every 1h` | Every hour |
-| `@every 6h` | Every 6 hours |
-| `0 */6 * * *` | Every 6 hours on the hour |
-| `0 2 * * *` | Daily at 2 AM |
-| `0 0 * * 0` | Weekly on Sunday at midnight |
-
-## Metrics
-
-Portager exposes custom Prometheus metrics on the controller-runtime metrics endpoint (`:8443/metrics`, HTTPS with authn/authz).
-
-| Metric | Type | Labels | Description |
-|---|---|---|---|
-| `portage_sync_total` | Counter | `name`, `namespace`, `status` | Reconcile completions (`success` / `failure`) |
-| `portage_sync_duration_seconds` | Histogram | `name`, `namespace` | Duration of each reconcile cycle |
-| `portage_images_copied_total` | Counter | `name`, `namespace` | Images actually copied |
-| `portage_images_skipped_total` | Counter | `name`, `namespace` | Images skipped (digest match) |
-| `portage_images_failed_total` | Counter | `name`, `namespace` | Image copy failures |
-| `portage_image_info` | Gauge | `name`, `namespace`, `synced`, `failed`, `total` | Current state snapshot per ImageSync |
-
-Standard controller-runtime metrics (`controller_runtime_reconcile_total`, `workqueue_*`, etc.) are also available on the same endpoint.
-
-### Enabling Prometheus Scraping
-
-**With Prometheus Operator (ServiceMonitor):**
-
-```bash
-helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
-  --set metrics.serviceMonitor.enabled=true
-```
-
-**With Kustomize:** The ServiceMonitor is included in the default kustomization.
-
-## Architecture
-
-```
-                         Kubernetes Cluster
-  +--------------------------------------------------------+
-  |                                                        |
-  |   ImageSync CRD          Portager Controller           |
-  |   (desired state)  --->  - Watches ImageSync           |
-  |                          - Authenticates to registries |
-  |   Secrets          --->  - Creates destination repos   |
-  |   (auth creds)           - Compares digests            |
-  |                          - Copies changed images       |
-  |   IRSA / IAM       --->  - Updates .status             |
-  |   (ECR auth)             - Emits Kubernetes Events     |
-  |                          - Records Prometheus metrics  |
-  +--------------+-------------------+---------------------+
-                 |                   |
-                 v                   v
-          +-----------+      +-----------+
-          |  Source    |      |   Dest    |
-          |  Registry  |      |  Registry |
-          |            |      |           |
-          |  cgr.dev   |      |   ECR     |
-          |  Docker Hub|      |   GCR     |
-          |  GHCR      |      |  Harbor   |
-          |  Quay      |      |   etc.    |
-          +-----------+      +-----------+
-```
+For Helm values, ImageSync spec reference, auth strategies, and metrics, see **[Configuration](docs/CONFIGURATION.md)**.
 
 ## Uninstalling
 
-### Helm
-
 ```bash
-# Remove all ImageSync resources first
 kubectl delete imagesync --all -A
-
-# Uninstall the Helm release
 helm uninstall portager -n portage-system
-
-# Remove CRDs (Helm does not delete CRDs on uninstall by design)
 kubectl delete crd imagesyncs.portager.portager.io
-
-# Remove the namespace
 kubectl delete ns portage-system
 ```
 
-### Kustomize
+<details>
+<summary>Uninstall with Kustomize</summary>
 
 ```bash
 kubectl delete imagesync --all -A
 make undeploy
 make uninstall
 ```
+</details>
 
-## Development
-
-### Prerequisites
-
-- Go 1.25+
-- Docker
-- [Kind](https://kind.sigs.k8s.io/)
-
-### Build and Test
+## Contributing
 
 ```bash
 make build          # Build the controller binary
 make test           # Run unit and integration tests
 make lint           # Run golangci-lint
 make helm-lint      # Lint the Helm chart
-make helm-template  # Render Helm templates locally
 ```
 
-### Local Development Cycle
-
-```bash
-kind create cluster --name portager-dev
-make docker-build IMG=portager:dev
-kind load docker-image portager:dev --name portager-dev
-helm install portager helm/portager/ -n portage-system --create-namespace \
-  --set image.repository=portager --set image.tag=dev --set image.pullPolicy=Never
-```
-
-### Development Phases
-
-| Phase | Description | Status |
-|---|---|---|
-| 0 | Project scaffolding, CRD types, minimal reconciler | Complete |
-| 1 | Single image copy with pluggable auth (Secret + Anonymous) | Complete |
-| 2 | Digest comparison, per-image status, Kubernetes Events | Complete |
-| 3 | Cron-based scheduling with `RequeueAfter`, sync-now annotation | Complete |
-| 4 | ECR authentication (IRSA), destination repo creation | Complete |
-| 5 | Multi-arch platform filtering | Deferred |
-| 6 | Prometheus metrics, Helm chart, leader election | Complete |
+See [Configuration — Development](docs/CONFIGURATION.md#development) for the full local development setup.
 
 ## License
 

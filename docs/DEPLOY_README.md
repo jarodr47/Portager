@@ -221,7 +221,7 @@ helm install portager helm/portager/ -n portage-system --create-namespace \
 
 ### 3. Apply ImageSync resources and use
 
-The rest of the workflow (apply ImageSync, watch reconciliation, verify in AWS) is identical to [Path A steps 5-8](#5-apply-an-imagesync-resource). No `kubectl set env` step needed -- the AWS SDK picks up credentials automatically from the OIDC token projected into the pod.
+The rest of the workflow (apply ImageSync, watch reconciliation, verify in AWS) is identical to [Path A steps 5-8](#5-apply-an-imagesync-resource). No `kubectl set env` step needed — the AWS SDK picks up credentials automatically from the OIDC token projected into the pod.
 
 ### 4. Cleanup
 
@@ -308,7 +308,7 @@ helm install portager helm/portager/ -n portage-system --create-namespace \
   --set metrics.serviceMonitor.enabled=true
 ```
 
-This creates a `ServiceMonitor` that Prometheus will discover automatically. See the [Metrics section in the README](../README.md#metrics) for the full list of `portage_*` metrics.
+This creates a `ServiceMonitor` that Prometheus will discover automatically. See [Configuration — Metrics](CONFIGURATION.md#metrics) for the full list of `portage_*` metrics.
 
 ---
 
@@ -344,14 +344,14 @@ The reconcile loop for an ImageSync with `method: ecr` and `createDestinationRep
  4. Schedule gate: skip if nextSyncTime is in the future
  5. Build destination authenticator (ECR):
     a. ParseECRRegion("599...amazonaws.com") -> "us-east-1"
-    b. LoadDefaultConfig(region) -- picks up IRSA, env vars, or ~/.aws
+    b. LoadDefaultConfig(region) — picks up IRSA, env vars, or ~/.aws
     c. Return ECRAuthenticator wrapping the ECR SDK client
  6. Authenticate:
     a. GetAuthorizationToken -> base64-encoded "AWS:<password>"
     b. Decode and return as authn.Authenticator for go-containerregistry
  7. Create destination repos (if createDestinationRepos is true):
     a. For each unique image name (with repositoryPrefix if set):
-    b. DescribeRepositories -- check if it exists
+    b. DescribeRepositories — check if it exists
     c. If RepositoryNotFoundException -> CreateRepository (mutable tags)
     d. Emit "RepoEnsured" event
  8. For each image + tag:
@@ -365,10 +365,10 @@ The reconcile loop for an ImageSync with `method: ecr` and `createDestinationRep
 ```
 
 The status on each ImageSync shows:
-- `lastSyncTime` / `nextSyncTime` -- when it last ran and will run again
-- `conditions` -- `Ready=True/SyncSucceeded` or `Ready=False/SyncFailed`
-- `images[].tags[].sourceDigest` -- the digest used for comparison
-- `syncedImages`, `failedImages`, `totalImages` -- summary counts
+- `lastSyncTime` / `nextSyncTime` — when it last ran and will run again
+- `conditions` — `Ready=True/SyncSucceeded` or `Ready=False/SyncFailed`
+- `images[].tags[].sourceDigest` — the digest used for comparison
+- `syncedImages`, `failedImages`, `totalImages` — summary counts
 
 ---
 
@@ -376,8 +376,8 @@ The status on each ImageSync shows:
 
 See `config/samples/` for ready-to-use examples:
 
-- `portager_v1alpha1_imagesync.yaml` -- Docker Hub to local registry (no auth)
-- `portager_v1alpha1_imagesync_ecr.yaml` -- Chainguard to ECR with IRSA and repo creation
+- `portager_v1alpha1_imagesync.yaml` — Docker Hub to local registry (no auth)
+- `portager_v1alpha1_imagesync_ecr.yaml` — Chainguard to ECR with IRSA and repo creation
 
 ---
 

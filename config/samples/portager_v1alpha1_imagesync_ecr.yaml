@@ -1,0 +1,28 @@
+apiVersion: portager.portager.io/v1alpha1
+kind: ImageSync
+metadata:
+  labels:
+    app.kubernetes.io/name: portage
+    app.kubernetes.io/managed-by: kustomize
+  name: imagesync-ecr-sample
+  namespace: default
+spec:
+  schedule: "@every 6h"
+  source:
+    registry: cgr.dev/my-org
+    authSecretRef:
+      name: chainguard-pull-secret
+  destination:
+    registry: 123456789012.dkr.ecr.us-gov-west-1.amazonaws.com
+    auth:
+      method: ecr
+    repositoryPrefix: chainguard
+  createDestinationRepos: true
+  images:
+    - name: go
+      tags:
+        - "latest"
+        - "1.22"
+    - name: python
+      tags:
+        - "latest"

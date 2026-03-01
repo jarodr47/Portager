@@ -107,6 +107,11 @@ type ImageSyncSpec struct {
 	// images is the list of images to sync from source to destination.
 	// +kubebuilder:validation:MinItems=1
 	Images []ImageSpec `json:"images"`
+
+	// createDestinationRepos, when true, causes the controller to create
+	// destination repositories before pushing (currently ECR only).
+	// +optional
+	CreateDestinationRepos bool `json:"createDestinationRepos,omitempty"`
 }
 
 // TagSyncStatus records the result of syncing a single image tag.

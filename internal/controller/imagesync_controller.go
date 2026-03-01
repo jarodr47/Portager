@@ -36,8 +36,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+
 	portagerv1alpha1 "github.com/jarodr47/portager/api/v1alpha1"
 	"github.com/jarodr47/portager/internal/controller/auth"
+	"github.com/jarodr47/portager/internal/controller/registry"
 	"github.com/jarodr47/portager/internal/controller/schedule"
 	"github.com/jarodr47/portager/internal/controller/sync"
 )
@@ -132,7 +136,11 @@ func (r *ImageSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// 5. Build authenticators for source and destination registries.
 	srcAuth := r.buildSourceAuth(&imageSync)
-	dstAuth := r.buildDestAuth(&imageSync)
+	dstAuth, err := r.buildDestAuth(ctx, &imageSync)
+	if err != nil {
+		return r.updateStatusWithError(ctx, &imageSync, "AuthFailed",
+			fmt.Sprintf("destination auth setup failed: %v", err))
+	}
 
 	srcAuthn, err := srcAuth.Authenticate(ctx)
 	if err != nil {
@@ -145,7 +153,42 @@ func (r *ImageSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			fmt.Sprintf("destination auth failed: %v", err))
 	}
 
-	// 3. For each image+tag: compare digests, copy if needed, build per-image status.
+	// 6. Create destination repositories if needed (ECR only).
+	if imageSync.Spec.CreateDestinationRepos && imageSync.Spec.Destination.Auth.Method == "ecr" {
+		region, err := auth.ParseECRRegion(imageSync.Spec.Destination.Registry)
+		if err != nil {
+			return r.updateStatusWithError(ctx, &imageSync, "RepoCreationFailed",
+				fmt.Sprintf("parsing ECR region for repo creation: %v", err))
+		}
+		cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+		if err != nil {
+			return r.updateStatusWithError(ctx, &imageSync, "RepoCreationFailed",
+				fmt.Sprintf("loading AWS config for repo creation: %v", err))
+		}
+		repoMgr := &registry.ECRRepoManager{Client: ecr.NewFromConfig(cfg)}
+
+		// Deduplicate repo names (prefix + image name).
+		seen := make(map[string]struct{})
+		for _, image := range imageSync.Spec.Images {
+			repoName := image.Name
+			if imageSync.Spec.Destination.RepositoryPrefix != "" {
+				repoName = imageSync.Spec.Destination.RepositoryPrefix + "/" + image.Name
+			}
+			if _, ok := seen[repoName]; ok {
+				continue
+			}
+			seen[repoName] = struct{}{}
+
+			if err := repoMgr.EnsureRepositoryExists(ctx, repoName); err != nil {
+				return r.updateStatusWithError(ctx, &imageSync, "RepoCreationFailed",
+					fmt.Sprintf("ensuring ECR repository %q exists: %v", repoName, err))
+			}
+			r.Recorder.Eventf(&imageSync, corev1.EventTypeNormal, "RepoEnsured",
+				"ECR repository %q exists or was created", repoName)
+		}
+	}
+
+	// 7. For each image+tag: compare digests, copy if needed, build per-image status.
 	copier := &sync.ImageCopier{}
 	var (
 		copyErrors   []error
@@ -316,21 +359,35 @@ func (r *ImageSyncReconciler) buildSourceAuth(is *portagerv1alpha1.ImageSync) au
 }
 
 // buildDestAuth returns an Authenticator for the destination registry.
-// If method is "secret" with a secretRef, uses SecretAuthenticator.
+// For "secret" method with a secretRef, uses SecretAuthenticator.
+// For "ecr" method, uses IRSA-based ECR authentication.
 // Otherwise returns anonymous (e.g., local registry with no auth).
-func (r *ImageSyncReconciler) buildDestAuth(is *portagerv1alpha1.ImageSync) auth.Authenticator {
-	if is.Spec.Destination.Auth.Method == "secret" && is.Spec.Destination.Auth.SecretRef != nil {
-		ns := is.Spec.Destination.Auth.SecretRef.Namespace
-		if ns == "" {
-			ns = is.Namespace
+func (r *ImageSyncReconciler) buildDestAuth(ctx context.Context, is *portagerv1alpha1.ImageSync) (auth.Authenticator, error) {
+	switch is.Spec.Destination.Auth.Method {
+	case "secret":
+		if is.Spec.Destination.Auth.SecretRef != nil {
+			ns := is.Spec.Destination.Auth.SecretRef.Namespace
+			if ns == "" {
+				ns = is.Namespace
+			}
+			return &auth.SecretAuthenticator{
+				Client:    r.Client,
+				SecretKey: types.NamespacedName{Name: is.Spec.Destination.Auth.SecretRef.Name, Namespace: ns},
+				Registry:  is.Spec.Destination.Registry,
+			}, nil
 		}
-		return &auth.SecretAuthenticator{
-			Client:    r.Client,
-			SecretKey: types.NamespacedName{Name: is.Spec.Destination.Auth.SecretRef.Name, Namespace: ns},
-			Registry:  is.Spec.Destination.Registry,
+	case "ecr":
+		region, err := auth.ParseECRRegion(is.Spec.Destination.Registry)
+		if err != nil {
+			return nil, fmt.Errorf("parsing ECR region: %w", err)
 		}
+		cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+		if err != nil {
+			return nil, fmt.Errorf("loading AWS config: %w", err)
+		}
+		return &auth.ECRAuthenticator{Client: ecr.NewFromConfig(cfg)}, nil
 	}
-	return &auth.AnonymousAuthenticator{}
+	return &auth.AnonymousAuthenticator{}, nil
 }
 
 // buildDestRef constructs the full destination image reference.

@@ -306,6 +306,90 @@ var _ = Describe("ImageSync Controller", func() {
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 
+		It("should fail gracefully with ECR auth method and unreachable registries", func() {
+			resourceName := "test-ecr-auth"
+			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &portagerv1alpha1.ImageSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: portagerv1alpha1.ImageSyncSpec{
+					Schedule: "@every 1h",
+					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
+					Destination: portagerv1alpha1.DestinationConfig{
+						Registry: "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+						Auth:     portagerv1alpha1.AuthConfig{Method: "ecr"},
+					},
+					Images: []portagerv1alpha1.ImageSpec{
+						{Name: "go", Tags: []string{"latest"}},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			fakeRecorder := record.NewFakeRecorder(100)
+			reconciler := newReconciler(fakeRecorder)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			// Should fail — either at ECR auth (GetAuthorizationToken) or at
+			// digest check. The exact failure point depends on the environment
+			// (whether AWS credentials exist locally).
+			Expect(err).To(HaveOccurred())
+
+			// Verify Ready condition is False regardless of where it failed.
+			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
+			readyCond := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+
+			// Cleanup.
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should fail gracefully when createDestinationRepos is true with ECR and no AWS credentials", func() {
+			resourceName := "test-ecr-repo-create"
+			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &portagerv1alpha1.ImageSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: portagerv1alpha1.ImageSyncSpec{
+					Schedule: "@every 1h",
+					Source:   portagerv1alpha1.SourceConfig{Registry: "cgr.dev/my-org"},
+					Destination: portagerv1alpha1.DestinationConfig{
+						Registry:         "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+						Auth:             portagerv1alpha1.AuthConfig{Method: "ecr"},
+						RepositoryPrefix: "chainguard",
+					},
+					Images: []portagerv1alpha1.ImageSpec{
+						{Name: "go", Tags: []string{"latest"}},
+					},
+					CreateDestinationRepos: true,
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			fakeRecorder := record.NewFakeRecorder(100)
+			reconciler := newReconciler(fakeRecorder)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			// Should fail — either at auth or repo creation due to missing AWS creds.
+			Expect(err).To(HaveOccurred())
+
+			// Verify Ready condition is False.
+			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
+			readyCond := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+
+			// Cleanup.
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
 		It("should reject invalid schedule expressions", func() {
 			resourceName := "test-invalid-schedule"
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}

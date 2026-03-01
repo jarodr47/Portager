@@ -39,6 +39,11 @@ spec:
           spec:
             description: spec defines the desired state of ImageSync
             properties:
+              createDestinationRepos:
+                description: |-
+                  createDestinationRepos, when true, causes the controller to create
+                  destination repositories before pushing (currently ECR only).
+                type: boolean
               destination:
                 description: destination defines the registry to push images to.
                 properties:

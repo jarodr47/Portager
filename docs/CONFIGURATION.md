@@ -56,14 +56,14 @@ aws iam create-policy --policy-name PortagerECRPolicy --policy-document file://p
 
 # 2. Create IRSA service account
 eksctl create iamserviceaccount \
-  --name portager --namespace portage-system \
+  --name portager --namespace portager-system \
   --cluster my-cluster \
   --attach-policy-arn arn:aws:iam::123456789012:policy/PortagerECRPolicy \
   --approve
 
 # 3. Install with the IRSA annotation
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
+  -n portager-system --create-namespace \
   --set serviceAccount.create=false \
   --set serviceAccount.name=portager
 ```
@@ -72,7 +72,7 @@ Or let Helm create the ServiceAccount with the annotation:
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
+  -n portager-system --create-namespace \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::123456789012:role/portager-ecr-role
 ```
 
@@ -82,7 +82,7 @@ helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
+  -n portager-system --create-namespace \
   --set aws.credentials.enabled=true \
   --set aws.credentials.accessKeyId=AKIAIOSFODNN7EXAMPLE \
   --set aws.credentials.secretAccessKey=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
@@ -92,23 +92,23 @@ helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
 **Option B: Existing Kubernetes Secret**
 
 ```bash
-kubectl create secret generic aws-creds -n portage-system \
+kubectl create secret generic aws-creds -n portager-system \
   --from-literal=AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
   --from-literal=AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
   --from-literal=AWS_REGION=us-east-1
 
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
+  -n portager-system --create-namespace \
   --set aws.existingSecret=aws-creds
 ```
 
 **Option C: Inject after install (useful for SSO/session tokens)**
 
 ```bash
-helm install portager helm/portager/ -n portage-system --create-namespace
+helm install portager helm/portager/ -n portager-system --create-namespace
 
 eval "$(aws configure export-credentials --format env)"
-kubectl set env deployment/portager-controller-manager -n portage-system \
+kubectl set env deployment/portager-controller-manager -n portager-system \
   AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
   AWS_SESSION_TOKEN="$AWS_SESSION_TOKEN" \
@@ -189,7 +189,7 @@ Standard controller-runtime metrics (`controller_runtime_reconcile_total`, `work
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  -n portage-system --create-namespace \
+  -n portager-system --create-namespace \
   --set metrics.serviceMonitor.enabled=true
 ```
 
@@ -221,7 +221,7 @@ make helm-template  # Render Helm templates locally
 kind create cluster --name portager-dev
 make docker-build IMG=portager:dev
 kind load docker-image portager:dev --name portager-dev
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager helm/portager/ -n portager-system --create-namespace \
   --set image.repository=portager --set image.tag=dev --set image.pullPolicy=Never
 ```
 

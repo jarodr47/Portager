@@ -35,7 +35,7 @@ kind load docker-image portager:dev --name portager-test
 
 ```bash
 helm install portager helm/portager/ \
-  -n portage-system --create-namespace \
+  -n portager-system --create-namespace \
   --set image.repository=portager \
   --set image.tag=dev \
   --set image.pullPolicy=Never
@@ -44,11 +44,11 @@ helm install portager helm/portager/ \
 ### 3. Verify the controller is running
 
 ```bash
-kubectl get pods -n portage-system
+kubectl get pods -n portager-system
 # NAME                                           READY   STATUS    AGE
 # portager-controller-manager-xxxxxxxxxx-xxxxx   1/1     Running   30s
 
-kubectl logs -n portage-system -l control-plane=controller-manager --tail=10
+kubectl logs -n portager-system -l control-plane=controller-manager --tail=10
 # Should show: "Successfully acquired lease", "Starting Controller"
 ```
 
@@ -59,14 +59,14 @@ Kind doesn't have IRSA, so inject credentials via environment variables:
 ```bash
 # For AWS SSO / aws sso login:
 eval "$(aws configure export-credentials --format env)"
-kubectl set env deployment/portager-controller-manager -n portage-system \
+kubectl set env deployment/portager-controller-manager -n portager-system \
   AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
   AWS_SESSION_TOKEN="$AWS_SESSION_TOKEN" \
   AWS_REGION=us-east-1
 
 # For long-lived IAM user credentials:
-kubectl set env deployment/portager-controller-manager -n portage-system \
+kubectl set env deployment/portager-controller-manager -n portager-system \
   AWS_ACCESS_KEY_ID="$(aws configure get aws_access_key_id)" \
   AWS_SECRET_ACCESS_KEY="$(aws configure get aws_secret_access_key)" \
   AWS_REGION=us-east-1
@@ -137,9 +137,9 @@ kubectl describe imagesync docker-to-ecr
 kubectl delete imagesync --all
 aws ecr delete-repository --repository-name mirror/alpine --force --region <REGION>
 aws ecr delete-repository --repository-name mirror/busybox --force --region <REGION>
-helm uninstall portager -n portage-system
+helm uninstall portager -n portager-system
 kubectl delete crd imagesyncs.portager.portager.io
-kubectl delete ns portage-system
+kubectl delete ns portager-system
 kind delete cluster --name portager-test
 ```
 
@@ -196,7 +196,7 @@ aws iam create-policy \
 ```bash
 eksctl create iamserviceaccount \
   --name portager \
-  --namespace portage-system \
+  --namespace portager-system \
   --cluster <CLUSTER_NAME> \
   --attach-policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/PortagerECRPolicy \
   --approve
@@ -205,7 +205,7 @@ eksctl create iamserviceaccount \
 Then install Helm using the existing service account:
 
 ```bash
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager helm/portager/ -n portager-system --create-namespace \
   --set serviceAccount.create=false \
   --set serviceAccount.name=portager
 ```
@@ -215,7 +215,7 @@ helm install portager helm/portager/ -n portage-system --create-namespace \
 Create the IAM role manually with a trust policy for your cluster's OIDC provider, then:
 
 ```bash
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager helm/portager/ -n portager-system --create-namespace \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::<ACCOUNT_ID>:role/portager-ecr-role
 ```
 
@@ -227,9 +227,9 @@ The rest of the workflow (apply ImageSync, watch reconciliation, verify in AWS) 
 
 ```bash
 kubectl delete imagesync --all -A
-helm uninstall portager -n portage-system
+helm uninstall portager -n portager-system
 kubectl delete crd imagesyncs.portager.portager.io
-eksctl delete iamserviceaccount --name portager --namespace portage-system --cluster <CLUSTER_NAME>
+eksctl delete iamserviceaccount --name portager --namespace portager-system --cluster <CLUSTER_NAME>
 aws iam delete-policy --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/PortagerECRPolicy
 ```
 
@@ -242,7 +242,7 @@ For GKE, AKS, self-managed, or any Kubernetes cluster that needs to push to ECR 
 ### Option 1: AWS credentials via Helm values
 
 ```bash
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager helm/portager/ -n portager-system --create-namespace \
   --set aws.credentials.enabled=true \
   --set aws.credentials.accessKeyId=AKIAIOSFODNN7EXAMPLE \
   --set aws.credentials.secretAccessKey=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
@@ -252,14 +252,14 @@ helm install portager helm/portager/ -n portage-system --create-namespace \
 ### Option 2: Existing Kubernetes Secret
 
 ```bash
-kubectl create namespace portage-system
+kubectl create namespace portager-system
 
-kubectl create secret generic aws-creds -n portage-system \
+kubectl create secret generic aws-creds -n portager-system \
   --from-literal=AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
   --from-literal=AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
   --from-literal=AWS_REGION=us-east-1
 
-helm install portager helm/portager/ -n portage-system \
+helm install portager helm/portager/ -n portager-system \
   --set aws.existingSecret=aws-creds
 ```
 
@@ -273,7 +273,7 @@ kubectl create secret docker-registry dest-creds \
   --docker-username=myuser \
   --docker-password=mypassword
 
-helm install portager helm/portager/ -n portage-system --create-namespace
+helm install portager helm/portager/ -n portager-system --create-namespace
 ```
 
 ```yaml
@@ -304,7 +304,7 @@ spec:
 Portager exposes custom metrics on `:8443/metrics` (HTTPS). To enable automatic scraping with the Prometheus Operator:
 
 ```bash
-helm install portager helm/portager/ -n portage-system --create-namespace \
+helm install portager helm/portager/ -n portager-system --create-namespace \
   --set metrics.serviceMonitor.enabled=true
 ```
 

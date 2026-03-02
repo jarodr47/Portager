@@ -76,7 +76,7 @@ Portager fills this gap with a Kubernetes-native, GitOps-friendly approach that 
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  --version 0.1.0 -n portage-system --create-namespace
+  --version 0.1.0 -n portager-system --create-namespace
 ```
 
 <details>
@@ -93,7 +93,7 @@ make deploy    # Deploy controller + RBAC
 ### Verify
 
 ```bash
-kubectl get pods -n portage-system
+kubectl get pods -n portager-system
 # NAME                                           READY   STATUS    AGE
 # portager-controller-manager-xxxxxxxxxx-xxxxx   1/1     Running   30s
 ```
@@ -146,9 +146,9 @@ For Helm values, ImageSync spec reference, auth strategies, and metrics, see **[
 
 ```bash
 kubectl delete imagesync --all -A
-helm uninstall portager -n portage-system
+helm uninstall portager -n portager-system
 kubectl delete crd imagesyncs.portager.portager.io
-kubectl delete ns portage-system
+kubectl delete ns portager-system
 ```
 
 <details>

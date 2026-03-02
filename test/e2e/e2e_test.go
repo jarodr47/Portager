@@ -34,16 +34,16 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "portage-system"
+const namespace = "portager-system"
 
 // serviceAccountName created for the project
-const serviceAccountName = "portage-controller-manager"
+const serviceAccountName = "portager-controller-manager"
 
 // metricsServiceName is the name of the metrics service of the project
-const metricsServiceName = "portage-controller-manager-metrics-service"
+const metricsServiceName = "portager-controller-manager-metrics-service"
 
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "portage-metrics-binding"
+const metricsRoleBindingName = "portager-metrics-binding"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
@@ -176,7 +176,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should ensure the metrics endpoint is serving metrics", func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
-				"--clusterrole=portage-metrics-reader",
+				"--clusterrole=portager-metrics-reader",
 				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)

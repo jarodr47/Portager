@@ -111,19 +111,32 @@ This configures:
 
 The AKS Workload Identity webhook automatically injects `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_FEDERATED_TOKEN_FILE` into the pod.
 
-### 7. Apply an ImageSync resource
+### 7. Create a pull secret for the source registry
+
+Portager pulls images from a private Nexus registry using a `dockerconfigjson` Secret:
+
+```bash
+kubectl create secret docker-registry nexus-pull-secret \
+  --docker-server=nexus.example.com \
+  --docker-username=myuser \
+  --docker-password=mypassword
+```
+
+### 8. Apply an ImageSync resource
 
 ```yaml
-# docker-to-acr.yaml
+# nexus-to-acr.yaml
 apiVersion: portager.portager.io/v1alpha1
 kind: ImageSync
 metadata:
-  name: docker-to-acr
+  name: nexus-to-acr
   namespace: default
 spec:
   schedule: "@every 1h"
   source:
-    registry: docker.io/library
+    registry: nexus.example.com
+    authSecretRef:
+      name: nexus-pull-secret
   destination:
     registry: myregistry.azurecr.io
     auth:
@@ -137,32 +150,32 @@ spec:
 ```
 
 ```bash
-kubectl apply -f docker-to-acr.yaml
+kubectl apply -f nexus-to-acr.yaml
 ```
 
 > **Note:** ACR automatically creates repositories on first push, so `createDestinationRepos` is not needed (that feature is ECR-only).
 
-### 8. Watch the reconciliation
+### 9. Watch the reconciliation
 
 ```bash
 # Events
-kubectl describe imagesync docker-to-acr
+kubectl describe imagesync nexus-to-acr
 # Events:
-#   ImageSynced  - Synced docker.io/library/alpine:latest -> myregistry.azurecr.io/mirror/alpine:latest
+#   ImageSynced  - Synced nexus.example.com/alpine:latest -> myregistry.azurecr.io/mirror/alpine:latest
 #   SyncComplete - Sync complete: 4 synced, 0 failed, 4 total
 
 # Full status
-kubectl get imagesync docker-to-acr -o jsonpath='{.status}' | jq .
+kubectl get imagesync nexus-to-acr -o jsonpath='{.status}' | jq .
 ```
 
-### 9. Verify in Azure
+### 10. Verify in Azure
 
 ```bash
 az acr repository list --name $ACR_NAME -o table
 az acr repository show-tags --name $ACR_NAME --repository mirror/alpine -o table
 ```
 
-### 10. Cleanup
+### 11. Cleanup
 
 ```bash
 kubectl delete imagesync --all -A
@@ -211,9 +224,9 @@ kubectl set env deployment/portager-controller-manager -n portager-system \
 
 > The `azidentity.NewDefaultAzureCredential()` picks up these environment variables automatically.
 
-### 4. Apply an ImageSync and verify
+### 4. Create a pull secret for the source registry and apply an ImageSync
 
-Same as [Path A steps 7-8](#7-apply-an-imagesync-resource).
+Same as [Path A steps 7-8](#7-create-a-pull-secret-for-the-source-registry) — create the Nexus pull secret and apply the ImageSync CR.
 
 ### 5. Cleanup
 
@@ -321,17 +334,29 @@ azure:
 
 ## ImageSync CR Examples for ACR
 
-### Docker Hub to ACR
+### Nexus to ACR
+
+The most common use case: pull from a private Nexus registry and push to ACR.
+
+```bash
+# Create the Nexus pull secret
+kubectl create secret docker-registry nexus-pull-secret \
+  --docker-server=nexus.example.com \
+  --docker-username=myuser \
+  --docker-password=mypassword
+```
 
 ```yaml
 apiVersion: portager.portager.io/v1alpha1
 kind: ImageSync
 metadata:
-  name: dockerhub-to-acr
+  name: nexus-to-acr
 spec:
   schedule: "@every 6h"
   source:
-    registry: docker.io/library
+    registry: nexus.example.com
+    authSecretRef:
+      name: nexus-pull-secret
   destination:
     registry: myregistry.azurecr.io
     auth:
@@ -346,24 +371,26 @@ spec:
       tags: ["3.12", "3.13"]
 ```
 
-### Chainguard to ACR (private source)
+### Nexus to ACR (multiple Nexus repositories)
+
+If your Nexus has images under different repository paths, create separate ImageSync resources or use `repositoryPrefix` to organize them in ACR:
 
 ```yaml
 apiVersion: portager.portager.io/v1alpha1
 kind: ImageSync
 metadata:
-  name: chainguard-to-acr
+  name: nexus-base-images-to-acr
 spec:
   schedule: "0 */6 * * *"
   source:
-    registry: cgr.dev/my-org
+    registry: nexus.example.com/docker-hosted
     authSecretRef:
-      name: chainguard-pull-secret
+      name: nexus-pull-secret
   destination:
     registry: myregistry.azurecr.io
     auth:
       method: acr
-    repositoryPrefix: chainguard
+    repositoryPrefix: base-images
   images:
     - name: go
       tags: ["latest", "1.22"]
@@ -371,28 +398,23 @@ spec:
       tags: ["22", "20"]
 ```
 
-Create the source pull secret:
+### Nexus to ACR (secret in a different namespace)
 
-```bash
-kubectl create secret docker-registry chainguard-pull-secret \
-  --docker-server=cgr.dev \
-  --docker-username=_json_key \
-  --docker-password="$(cat key.json)"
-```
-
-### GHCR to ACR
+If the Nexus pull secret lives in a different namespace, specify it explicitly:
 
 ```yaml
 apiVersion: portager.portager.io/v1alpha1
 kind: ImageSync
 metadata:
-  name: ghcr-to-acr
+  name: nexus-to-acr-cross-ns
+  namespace: default
 spec:
   schedule: "@every 1h"
   source:
-    registry: ghcr.io/my-org
+    registry: nexus.example.com
     authSecretRef:
-      name: ghcr-pull-secret
+      name: nexus-pull-secret
+      namespace: shared-secrets
   destination:
     registry: myregistry.azurecr.io
     auth:

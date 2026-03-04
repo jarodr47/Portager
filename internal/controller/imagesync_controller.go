@@ -37,6 +37,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 
@@ -405,6 +406,16 @@ func (r *ImageSyncReconciler) buildDestAuth(ctx context.Context, is *portagerv1a
 			return nil, fmt.Errorf("loading AWS config: %w", err)
 		}
 		return &auth.ECRAuthenticator{Client: ecr.NewFromConfig(cfg)}, nil
+	case "acr":
+		cred, err := azidentity.NewDefaultAzureCredential(nil)
+		if err != nil {
+			return nil, fmt.Errorf("loading Azure credentials: %w", err)
+		}
+		return &auth.ACRAuthenticator{
+			TokenClient: auth.NewACRTokenClient(),
+			Credential:  cred,
+			Registry:    is.Spec.Destination.Registry,
+		}, nil
 	}
 	return &auth.AnonymousAuthenticator{}, nil
 }

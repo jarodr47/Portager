@@ -48,8 +48,9 @@ type SourceConfig struct {
 // AuthConfig defines how the controller authenticates to the destination registry.
 type AuthConfig struct {
 	// method specifies the authentication strategy.
-	// "secret" uses a dockerconfigjson Secret; "ecr" uses IRSA for AWS ECR.
-	// +kubebuilder:validation:Enum=secret;ecr
+	// "secret" uses a dockerconfigjson Secret; "ecr" uses IRSA for AWS ECR;
+	// "acr" uses Azure Workload Identity for Azure Container Registry.
+	// +kubebuilder:validation:Enum=secret;ecr;acr
 	// +kubebuilder:validation:Required
 	Method string `json:"method"`
 

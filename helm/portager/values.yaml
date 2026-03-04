@@ -37,3 +37,9 @@ aws:
     region: "us-east-1"
   # Reference an existing Secret containing AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
   existingSecret: ""
+
+azure:
+  # For AKS clusters with Workload Identity configured
+  workloadIdentity:
+    enabled: false
+    clientId: ""  # Azure AD application client ID

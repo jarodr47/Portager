@@ -41,3 +41,6 @@ bin/
 .DS_Store
 
 docs/spec.md
+docs/CODE_WALKTHROUGH.md
+docs/SECURITY_POSTURE.md
+docs/ROADMAP.md

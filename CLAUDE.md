@@ -14,14 +14,15 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 
 **Version:** v0.1.0 (released)
 
-### Implemented (Phases 0-4, 6)
+### Implemented (Phases 0-4, 6 + Tier 1)
 - CRD types, reconciler, full sync loop
 - Secret-based auth, anonymous auth, ECR auth (IRSA)
 - Digest comparison, per-image status, Kubernetes Events
 - Cron scheduling with RequeueAfter, sync-now annotation
 - ECR repo auto-creation
 - Prometheus metrics, Helm chart, leader election
-- CI: unit tests, e2e tests, multi-arch build + push, Helm OCI publish
+- CI: unit tests, e2e tests, multi-arch build + push, Helm OCI publish, Trivy scanning
+- Supply chain security: all GitHub Actions pinned to commit SHAs, cosign keyless image signing on tagged releases, SBOM generation (SPDX + CycloneDX) attached as OCI attestations, SLSA provenance via `provenance: mode=max`, Dependabot for automated dependency updates
 
 ### Not Implemented
 
@@ -112,10 +113,12 @@ make helm-template    # Render Helm templates locally
 │   ├── CONFIGURATION.md           # Helm values, auth strategies, spec reference
 │   ├── DEPLOY_README.md           # Deployment walkthroughs (EKS, non-EKS, etc.)
 │   └── spec.md                    # Original design spec (historical)
+├── .github/dependabot.yml         # Automated dependency updates (actions, gomod, docker)
 └── .github/workflows/
     ├── test.yml                   # Unit/integration CI
     ├── test-e2e.yml               # E2E CI (Kind cluster)
-    └── build-push.yml             # Build + push image and Helm chart to GHCR
+    ├── build-push.yml             # Build + push + sign + SBOM + provenance
+    └── trivy.yml                  # Container vulnerability scanning (SARIF → GitHub Security)
 ```
 
 ## Key Dependencies
@@ -221,9 +224,12 @@ make cleanup-test-e2e # Delete Kind cluster
 
 ## CI/CD
 
+All GitHub Actions are pinned to full commit SHAs (not floating tags) for supply chain security. Dependabot (`.github/dependabot.yml`) proposes weekly PRs for action, Go module, and Docker base image updates.
+
 - **test.yml** — Runs `make test` on push/PR
 - **test-e2e.yml** — Spins up Kind, runs `make test-e2e` on push/PR
-- **build-push.yml** — Builds multi-arch image (amd64/arm64) and pushes to GHCR. On `v*` tags, also publishes the Helm chart as an OCI artifact to `oci://ghcr.io/jarodr47/portager/charts`
+- **build-push.yml** — Builds multi-arch image (amd64/arm64) and pushes to GHCR. On every push: generates SPDX + CycloneDX SBOMs and attaches them as OCI attestations via cosign. On `v*` tags: signs images with cosign (keyless via Fulcio + Rekor), uploads SBOMs to GitHub Release, and publishes the Helm chart to `oci://ghcr.io/jarodr47/portager/charts`. SLSA provenance is attached via `docker/build-push-action` with `provenance: mode=max`.
+- **trivy.yml** — Builds image locally and runs Trivy vulnerability scanner. Uploads SARIF to GitHub Security tab and fails on CRITICAL/HIGH findings.
 
 ## Gotchas
 

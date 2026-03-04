@@ -38,9 +38,12 @@ Portager supports multiple authentication strategies through a pluggable interfa
 
 | Method | Use Case | Configuration |
 |---|---|---|
-| **Anonymous** | Public registries (Docker Hub, Quay, GHCR public) | Omit auth fields |
+| **Anonymous (source)** | Public source registries (Docker Hub, Quay, GHCR public) | Omit `spec.source.authSecretRef` |
+| **Anonymous (destination)** | Local/insecure registries with no auth | `spec.destination.auth.method: secret` with no `secretRef` |
 | **Kubernetes Secret** | Any registry with username/password or token auth | `spec.source.authSecretRef` or `spec.destination.auth.secretRef` referencing a `kubernetes.io/dockerconfigjson` Secret |
 | **ECR (IRSA / IAM)** | Amazon ECR | `spec.destination.auth.method: ecr` — uses the AWS credential chain (IRSA, env vars, instance profile) |
+
+> **Note:** For source registries, anonymous auth is the default when `authSecretRef` is omitted. For destination registries, `auth.method` is required by the CRD — use `method: secret` without a `secretRef` to get anonymous auth (useful for local registries like `registry:2` that don't require credentials).
 
 ### AWS Credential Strategies
 
@@ -135,7 +138,7 @@ spec:
     registry: 123456789012.dkr.ecr.us-east-1.amazonaws.com
     auth:
       method: ecr                  # "ecr" or "secret"
-      secretRef:                   # Required when method is "secret"
+      secretRef:                   # Optional: omit for anonymous dest auth
         name: dest-creds
     repositoryPrefix: mirror       # Optional: images land under mirror/<name>
   createDestinationRepos: true     # Optional: auto-create ECR repos

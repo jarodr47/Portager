@@ -265,7 +265,18 @@ helm install portager helm/portager/ -n portager-system \
 
 ### No ECR? No AWS credentials needed
 
-If your destination is not ECR (e.g., Harbor, Nexus, GitLab Registry), you don't need any AWS configuration. Use `method: secret` with a `dockerconfigjson` Secret:
+If your destination is not ECR (e.g., Harbor, Nexus, GitLab Registry), you don't need any AWS configuration. Use `method: secret` with a `dockerconfigjson` Secret.
+
+For registries that don't require authentication (e.g., a local `registry:2`), use `method: secret` without a `secretRef` — the controller falls back to anonymous auth:
+
+```yaml
+destination:
+  registry: 172.18.0.3:5000
+  auth:
+    method: secret          # no secretRef = anonymous
+```
+
+For registries with credentials:
 
 ```bash
 kubectl create secret docker-registry dest-creds \

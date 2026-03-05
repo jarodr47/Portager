@@ -12,7 +12,7 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 
 ## Current Status
 
-**Version:** v0.1.0 (released)
+**Version:** v0.1.1 (released)
 
 ### Implemented (Phases 0-4, 6 + Tier 1)
 - CRD types, reconciler, full sync loop
@@ -107,7 +107,7 @@ make helm-template    # Render Helm templates locally
 │   └── sync/                      # Image copy via go-containerregistry (crane)
 │       └── copier.go              #   ImageCopier with staticKeychain
 ├── config/                        # Kustomize manifests (CRDs, RBAC, manager)
-├── helm/portager/                 # Helm chart (v0.1.0)
+├── helm/portager/                 # Helm chart (v0.1.1)
 ├── test/e2e/                      # E2E tests (Kind + Ginkgo)
 ├── docs/
 │   ├── CONFIGURATION.md           # Helm values, auth strategies, spec reference

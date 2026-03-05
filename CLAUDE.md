@@ -14,7 +14,7 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 
 **Version:** v0.1.1 (released)
 
-### Implemented (Phases 0-4, 6 + Tier 1)
+### Implemented (Phases 0-4, 6 + Tier 1 + CR.1)
 - CRD types, reconciler, full sync loop
 - Secret-based auth, anonymous auth, ECR auth (IRSA)
 - Digest comparison, per-image status, Kubernetes Events
@@ -155,17 +155,18 @@ Reconcile(ImageSync) →
   1. Fetch ImageSync (return nil if NotFound)
   2. Validate cron schedule via Scheduler
   3. Check sync-now annotation → bypass schedule if set
-  4. Check if due based on nextSyncTime → requeue if not
-  5. Build source/dest authenticators (anonymous, secret, or ECR)
-  6. If createDestinationRepos + ECR → ensure repos exist
-  7. For each image+tag:
+  4. Check if spec changed (generation != observedGeneration) → sync immediately
+  5. Check if due based on nextSyncTime → requeue if not (only when spec unchanged)
+  6. Build source/dest authenticators (anonymous, secret, or ECR)
+  7. If createDestinationRepos + ECR → ensure repos exist
+  8. For each image+tag:
      a. GetDigest on source (HTTP HEAD, no layer download)
      b. GetDigest on destination (may fail if not pushed yet)
      c. If digests match → skip, emit ImageSkipped event
      d. If different/missing → crane.Copy, emit ImageSynced or SyncFailed
-  8. Update .status (conditions, per-image results, summary counts)
-  9. Emit SyncComplete event
- 10. Requeue after next schedule interval
+  9. Update .status (conditions, per-image results, summary counts, observedGeneration)
+ 10. Emit SyncComplete event
+ 11. Requeue after next schedule interval
 ```
 
 ### Key Design Patterns
@@ -180,6 +181,7 @@ Reconcile(ImageSync) →
 
 ```
 ImageSyncStatus
+├── ObservedGeneration
 ├── LastSyncTime, NextSyncTime
 ├── Conditions: []metav1.Condition (Ready, Syncing)
 ├── Images: []ImageSyncStatusImage

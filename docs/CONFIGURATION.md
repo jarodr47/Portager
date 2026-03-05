@@ -161,7 +161,9 @@ spec:
 
 ### On-Demand Sync
 
-To trigger an immediate sync outside the cron schedule:
+**Spec changes trigger immediate sync automatically.** When you modify an ImageSync resource (add images, change tags, update auth config, etc.), the controller detects the spec generation change and syncs immediately, even if the cron schedule isn't due yet. No annotation needed — this works naturally with GitOps tools like ArgoCD and Flux.
+
+To force a re-sync when the spec hasn't changed (e.g., to pick up upstream tag changes early):
 
 ```bash
 kubectl annotate imagesync <name> portager.portager.io/sync-now=true

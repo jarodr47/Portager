@@ -352,27 +352,28 @@ The reconcile loop for an ImageSync with `method: ecr` and `createDestinationRep
  1. Fetch ImageSync CR from the API server
  2. Validate the cron schedule expression
  3. Check for sync-now annotation (remove if present, bypass schedule)
- 4. Schedule gate: skip if nextSyncTime is in the future
- 5. Build destination authenticator (ECR):
+ 4. Check if spec changed (generation != observedGeneration) → sync immediately
+ 5. Schedule gate: skip if nextSyncTime is in the future (only when spec unchanged)
+ 6. Build destination authenticator (ECR):
     a. ParseECRRegion("599...amazonaws.com") -> "us-east-1"
     b. LoadDefaultConfig(region) — picks up IRSA, env vars, or ~/.aws
     c. Return ECRAuthenticator wrapping the ECR SDK client
- 6. Authenticate:
+ 7. Authenticate:
     a. GetAuthorizationToken -> base64-encoded "AWS:<password>"
     b. Decode and return as authn.Authenticator for go-containerregistry
- 7. Create destination repos (if createDestinationRepos is true):
+ 8. Create destination repos (if createDestinationRepos is true):
     a. For each unique image name (with repositoryPrefix if set):
     b. DescribeRepositories — check if it exists
     c. If RepositoryNotFoundException -> CreateRepository (mutable tags)
     d. Emit "RepoEnsured" event
- 8. For each image + tag:
+ 9. For each image + tag:
     a. Get source digest (HEAD request, no layer download)
     b. Get destination digest
     c. If digests match -> skip, emit "ImageSkipped"
     d. If different or missing -> crane.Copy, emit "ImageSynced"
- 9. Update status: conditions, per-image results, counts
-10. Record Prometheus metrics (sync_total, duration, copied/skipped/failed)
-11. Compute nextSyncTime from cron schedule, requeue with RequeueAfter
+10. Update status: conditions, per-image results, counts, observedGeneration
+11. Record Prometheus metrics (sync_total, duration, copied/skipped/failed)
+12. Compute nextSyncTime from cron schedule, requeue with RequeueAfter
 ```
 
 The status on each ImageSync shows:

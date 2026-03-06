@@ -29,6 +29,21 @@ For deployment walkthroughs, see the [Deploy Guide](DEPLOY_README.md). For a pro
 | `aws.credentials.secretAccessKey` | `""` | AWS secret access key |
 | `aws.credentials.region` | `us-east-1` | AWS region |
 | `aws.existingSecret` | `""` | Name of an existing Secret containing AWS credentials |
+| `nodeSelector` | `{}` | Node selector for pod scheduling |
+| `tolerations` | `[]` | Tolerations for pod scheduling |
+| `affinity` | `{}` | Affinity rules for pod scheduling |
+| `topologySpreadConstraints` | `[]` | Topology spread constraints for pod scheduling |
+| `priorityClassName` | `""` | Priority class name for the controller pod |
+| `podAnnotations` | `{}` | Annotations added to controller pod metadata |
+| `podLabels` | `{}` | Labels added to controller pod metadata |
+| `imagePullSecrets` | `[]` | Image pull secrets for the controller pod |
+| `extraEnv` | `[]` | Additional environment variables for the controller container |
+| `extraVolumes` | `[]` | Additional volumes for the controller pod |
+| `extraVolumeMounts` | `[]` | Additional volume mounts for the controller container |
+| `podDisruptionBudget.enabled` | `false` | Enable PodDisruptionBudget for the controller |
+| `podDisruptionBudget.minAvailable` | `1` | Minimum available pods during disruption |
+| `startupProbe.enabled` | `false` | Enable startup probe (httpGet /healthz:8081, 5min budget) |
+| `terminationGracePeriodSeconds` | `10` | Termination grace period for the controller pod |
 
 ---
 

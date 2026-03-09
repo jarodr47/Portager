@@ -18,6 +18,12 @@ import (
 // an ACR refresh token obtained via OAuth2 token exchange.
 const acrUsername = "00000000-0000-0000-0000-000000000000"
 
+// acrScope is the AAD scope used to obtain an access token for ACR.
+// Individual ACR instances are not registered as AAD resource principals,
+// so we must use the global Azure management scope. The returned token is
+// then exchanged for an ACR-specific refresh token at /oauth2/exchange.
+const acrScope = "https://management.azure.com/.default"
+
 // ACRTokenClient abstracts the ACR OAuth2 token exchange endpoint.
 // This allows unit testing without real HTTP calls.
 type ACRTokenClient interface {
@@ -37,10 +43,11 @@ type ACRAuthenticator struct {
 // it for an ACR refresh token via the registry's OAuth2 endpoint, and returns
 // an authn.Authenticator usable by go-containerregistry.
 func (a *ACRAuthenticator) Authenticate(ctx context.Context) (authn.Authenticator, error) {
-	// Request an AAD token scoped to this ACR instance.
-	scope := fmt.Sprintf("https://%s/.default", a.Registry)
+	// Request an AAD token scoped to Azure management plane.
+	// Individual ACR instances are not AAD resource principals, so we use
+	// the global management scope and exchange it for an ACR refresh token.
 	token, err := a.Credential.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{scope},
+		Scopes: []string{acrScope},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("acquiring AAD token for ACR: %w", err)

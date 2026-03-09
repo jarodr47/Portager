@@ -9,3 +9,6 @@
 # Re-include Go module files
 !go.mod
 !go.sum
+
+# Corporate CA certificate
+!corp-root-ca.crt

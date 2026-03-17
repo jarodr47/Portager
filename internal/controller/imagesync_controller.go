@@ -121,9 +121,10 @@ func (r *ImageSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		syncNow = true
 	}
 
-	// 4. Schedule check — skip if sync-now was triggered.
+	// 4. Schedule check — skip if sync-now was triggered or spec changed.
 	if !syncNow {
-		if imageSync.Status.NextSyncTime != nil {
+		specChanged := imageSync.Generation != imageSync.Status.ObservedGeneration
+		if !specChanged && imageSync.Status.NextSyncTime != nil {
 			nextSync := imageSync.Status.NextSyncTime.Time
 			if time.Now().Before(nextSync) {
 				requeueAfter := time.Until(nextSync)
@@ -134,7 +135,13 @@ func (r *ImageSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return ctrl.Result{RequeueAfter: requeueAfter}, nil
 			}
 		}
-		// NextSyncTime is nil (first sync) or in the past (due) — proceed.
+		if specChanged {
+			log.Info("Spec generation changed, syncing immediately",
+				"generation", imageSync.Generation,
+				"observedGeneration", imageSync.Status.ObservedGeneration,
+			)
+		}
+		// NextSyncTime is nil (first sync) or in the past (due) or spec changed — proceed.
 	}
 
 	// 5. Build authenticators for source and destination registries.
@@ -284,6 +291,7 @@ func (r *ImageSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	imageSync.Status.TotalImages = totalCount
 	imageSync.Status.SyncedImages = syncedCount
 	imageSync.Status.FailedImages = failedCount
+	imageSync.Status.ObservedGeneration = imageSync.Generation
 
 	// Mark Syncing=False in the final status write (not as a separate update,
 	// which would trigger an extra reconcile cycle).

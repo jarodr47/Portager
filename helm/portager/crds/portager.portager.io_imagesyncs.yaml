@@ -276,6 +276,13 @@ spec:
                   sync.
                 format: date-time
                 type: string
+              observedGeneration:
+                description: |-
+                  observedGeneration is the most recent generation observed by the controller.
+                  When this differs from metadata.generation, the controller syncs immediately
+                  regardless of schedule.
+                format: int64
+                type: integer
               syncedImages:
                 description: syncedImages is the number of image+tag combinations
                   successfully synced or already up-to-date.

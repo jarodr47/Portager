@@ -21,3 +21,12 @@ jobs:
         run: |
           go mod tidy
           make test
+
+      - name: Verify generated manifests are up to date
+        run: |
+          make manifests
+          if ! git diff --quiet --exit-code; then
+            echo "::error::Generated files are out of date. Run 'make manifests' and commit the changes."
+            git diff --stat
+            exit 1
+          fi

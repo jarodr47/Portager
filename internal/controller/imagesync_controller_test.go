@@ -163,7 +163,7 @@ var _ = Describe("ImageSync Controller", func() {
 	Context("Scheduling", func() {
 		ctx := context.Background()
 
-		It("should skip sync when nextSyncTime is in the future", func() {
+		It("should skip sync when nextSyncTime is in the future and spec unchanged", func() {
 			resourceName := "test-not-due"
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
@@ -186,10 +186,12 @@ var _ = Describe("ImageSync Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
-			// Set nextSyncTime 1 hour in the future via status update.
+			// Set nextSyncTime 1 hour in the future and mark generation as observed
+			// so the controller knows the spec hasn't changed.
 			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
 			futureTime := metav1.NewTime(time.Now().Add(1 * time.Hour))
 			resource.Status.NextSyncTime = &futureTime
+			resource.Status.ObservedGeneration = resource.Generation
 			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
 
 			fakeRecorder := record.NewFakeRecorder(100)
@@ -204,6 +206,53 @@ var _ = Describe("ImageSync Controller", func() {
 
 			// No sync should have occurred — no events emitted.
 			Expect(fakeRecorder.Events).To(HaveLen(0))
+
+			// Cleanup.
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should sync immediately when spec generation changes even if nextSyncTime is in the future", func() {
+			resourceName := "test-spec-changed"
+			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &portagerv1alpha1.ImageSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: portagerv1alpha1.ImageSyncSpec{
+					Schedule: "@every 1h",
+					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
+					Destination: portagerv1alpha1.DestinationConfig{
+						Registry: "localhost:5000",
+						Auth:     portagerv1alpha1.AuthConfig{Method: "secret"},
+					},
+					Images: []portagerv1alpha1.ImageSpec{
+						{Name: "alpine", Tags: []string{"latest"}},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			// Set nextSyncTime far in the future but leave observedGeneration at 0
+			// (simulating a spec change: generation=1 != observedGeneration=0).
+			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
+			Expect(resource.Generation).To(BeNumerically(">=", 1))
+			futureTime := metav1.NewTime(time.Now().Add(24 * time.Hour))
+			resource.Status.NextSyncTime = &futureTime
+			// ObservedGeneration intentionally left at 0 (default).
+			Expect(k8sClient.Status().Update(ctx, resource)).To(Succeed())
+
+			fakeRecorder := record.NewFakeRecorder(100)
+			reconciler := newReconciler(fakeRecorder)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			// Sync should be attempted despite future nextSyncTime (fake registry fails).
+			Expect(err).To(HaveOccurred())
+
+			// Verify sync was attempted by checking for events.
+			Expect(fakeRecorder.Events).To(Receive(ContainSubstring("SyncFailed")))
+			Expect(fakeRecorder.Events).To(Receive(ContainSubstring("SyncComplete")))
 
 			// Cleanup.
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())

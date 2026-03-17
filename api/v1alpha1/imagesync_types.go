@@ -176,6 +176,12 @@ type ImageSyncStatus struct {
 	// failedImages is the number of image+tag combinations that failed to sync.
 	// +optional
 	FailedImages int `json:"failedImages,omitempty"`
+
+	// observedGeneration is the most recent generation observed by the controller.
+	// When this differs from metadata.generation, the controller syncs immediately
+	// regardless of schedule.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

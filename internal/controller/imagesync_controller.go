@@ -413,6 +413,8 @@ func (r *ImageSyncReconciler) buildDestAuth(ctx context.Context, is *portagerv1a
 			return nil, fmt.Errorf("loading AWS config: %w", err)
 		}
 		return &auth.ECRAuthenticator{Client: ecr.NewFromConfig(cfg)}, nil
+	case "anonymous":
+		return &auth.AnonymousAuthenticator{}, nil
 	}
 	return &auth.AnonymousAuthenticator{}, nil
 }

@@ -44,6 +44,10 @@ For deployment walkthroughs, see the [Deploy Guide](DEPLOY_README.md). For a pro
 | `podDisruptionBudget.minAvailable` | `1` | Minimum available pods during disruption |
 | `startupProbe.enabled` | `false` | Enable startup probe (httpGet /healthz:8081, 5min budget) |
 | `terminationGracePeriodSeconds` | `10` | Termination grace period for the controller pod |
+| `networkPolicy.enabled` | `false` | Enable NetworkPolicy for the controller pod |
+| `networkPolicy.metrics.namespaceSelector` | `{kubernetes.io/metadata.name: monitoring}` | Labels to match namespaces allowed to scrape metrics |
+| `networkPolicy.egress.registryCIDRs` | `[]` | Restrict registry egress to specific CIDRs (empty = allow all) |
+| `networkPolicy.egress.apiServerCIDR` | `""` | Restrict API server egress to a specific CIDR (empty = allow all) |
 
 ---
 
@@ -54,11 +58,12 @@ Portager supports multiple authentication strategies through a pluggable interfa
 | Method | Use Case | Configuration |
 |---|---|---|
 | **Anonymous (source)** | Public source registries (Docker Hub, Quay, GHCR public) | Omit `spec.source.authSecretRef` |
-| **Anonymous (destination)** | Local/insecure registries with no auth | `spec.destination.auth.method: secret` with no `secretRef` |
+| **Anonymous (destination, explicit)** | Public/local registries with no auth | `spec.destination.auth.method: anonymous` |
+| **Anonymous (destination, legacy)** | Backward-compatible anonymous auth | `spec.destination.auth.method: secret` with no `secretRef` |
 | **Kubernetes Secret** | Any registry with username/password or token auth | `spec.source.authSecretRef` or `spec.destination.auth.secretRef` referencing a `kubernetes.io/dockerconfigjson` Secret |
 | **ECR (IRSA / IAM)** | Amazon ECR | `spec.destination.auth.method: ecr` — uses the AWS credential chain (IRSA, env vars, instance profile) |
 
-> **Note:** For source registries, anonymous auth is the default when `authSecretRef` is omitted. For destination registries, `auth.method` is required by the CRD — use `method: secret` without a `secretRef` to get anonymous auth (useful for local registries like `registry:2` that don't require credentials).
+> **Note:** For source registries, anonymous auth is the default when `authSecretRef` is omitted. For destination registries, `auth.method` is required by the CRD. Use `method: anonymous` for unauthenticated destinations (recommended). `method: secret` without a `secretRef` still works for backward compatibility but `method: anonymous` is the preferred explicit approach.
 
 ### AWS Credential Strategies
 
@@ -152,7 +157,7 @@ spec:
   destination:
     registry: 123456789012.dkr.ecr.us-east-1.amazonaws.com
     auth:
-      method: ecr                  # "ecr" or "secret"
+      method: ecr                  # "ecr", "secret", or "anonymous"
       secretRef:                   # Optional: omit for anonymous dest auth
         name: dest-creds
     repositoryPrefix: mirror       # Optional: images land under mirror/<name>
@@ -185,6 +190,24 @@ kubectl annotate imagesync <name> portager.portager.io/sync-now=true
 ```
 
 The controller removes the annotation after processing.
+
+---
+
+## Network Policies
+
+When `networkPolicy.enabled` is set to `true`, a Kubernetes `NetworkPolicy` is created that restricts traffic to and from the controller pod:
+
+**Ingress (allowed):**
+- TCP 8443 (metrics) from namespaces matching `networkPolicy.metrics.namespaceSelector` labels (default: `kubernetes.io/metadata.name: monitoring`)
+
+**Egress (allowed):**
+- UDP/TCP 53 to any (DNS resolution)
+- TCP 443 to any (HTTPS to OCI registries), optionally restricted via `networkPolicy.egress.registryCIDRs`
+- TCP 6443 to any (Kubernetes API server), optionally restricted via `networkPolicy.egress.apiServerCIDR`
+
+**All other traffic is denied** when the policy is active.
+
+> **Note:** Network policies require a CNI plugin that supports them (e.g., Calico, Cilium, Weave Net). The default Kubernetes CNI (kubenet) and Kind's default CNI do not enforce NetworkPolicy rules. This feature is disabled by default for compatibility.
 
 ---
 

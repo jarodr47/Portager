@@ -104,3 +104,16 @@ startupProbe:
   enabled: false
 
 terminationGracePeriodSeconds: 10
+
+# -- Network policies
+
+networkPolicy:
+  enabled: false
+  metrics:
+    namespaceSelector:
+      kubernetes.io/metadata.name: monitoring
+  egress:
+    registryCIDRs: []
+      # - 10.0.0.0/8
+    apiServerCIDR: ""
+      # e.g., 10.96.0.1/32

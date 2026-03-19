@@ -1,0 +1,52 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "portager.fullname" . }}-controller-manager
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "portager.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "portager.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow metrics scraping (TCP 8443) from configured namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.metrics.namespaceSelector | nindent 14 }}
+      ports:
+        - port: 8443
+          protocol: TCP
+  egress:
+    # Allow DNS resolution (UDP and TCP 53)
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow HTTPS to registries (TCP 443)
+    - ports:
+        - port: 443
+          protocol: TCP
+      {{- if .Values.networkPolicy.egress.registryCIDRs }}
+      to:
+        {{- range .Values.networkPolicy.egress.registryCIDRs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      {{- end }}
+    # Allow Kubernetes API server (TCP 6443)
+    - ports:
+        - port: 6443
+          protocol: TCP
+      {{- if .Values.networkPolicy.egress.apiServerCIDR }}
+      to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.egress.apiServerCIDR }}
+      {{- end }}
+{{- end }}

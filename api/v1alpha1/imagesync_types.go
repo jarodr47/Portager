@@ -84,9 +84,24 @@ type ImageSpec struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// tags is the list of image tags to sync (e.g., ["latest", "1.22"]).
-	// +kubebuilder:validation:MinItems=1
-	Tags []string `json:"tags"`
+	// tags is the list of explicit image tags to sync (e.g., ["latest", "1.22"]).
+	// At least one of tags or semver must be specified.
+	// +optional
+	Tags []string `json:"tags,omitempty"`
+
+	// semver is a semver constraint string for auto-discovering tags from the
+	// source registry. Supports wildcards (1.x, 1.3.x), ranges (>=1.22.0 <1.23.0),
+	// tilde (~1.3.0), and caret (^1.3.0) syntax. Non-semver tags in the registry
+	// are silently skipped. Resolved tags are sorted by version descending (newest first).
+	// +optional
+	Semver string `json:"semver,omitempty"`
+
+	// maxTags limits how many semver-matched tags are synced (newest first).
+	// Only applies when semver is set. 0 means unlimited.
+	// +kubebuilder:default=10
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxTags int `json:"maxTags,omitempty"`
 }
 
 // ImageSyncSpec defines the desired state of ImageSync — which images to sync,
@@ -258,6 +273,11 @@ type ImageSyncStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Synced",type=integer,JSONPath=`.status.syncedImages`
+// +kubebuilder:printcolumn:name="Failed",type=integer,JSONPath=`.status.failedImages`
+// +kubebuilder:printcolumn:name="Schedule",type=string,JSONPath=`.spec.schedule`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // ImageSync is the Schema for the imagesyncs API
 type ImageSync struct {

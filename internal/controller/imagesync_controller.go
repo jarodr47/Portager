@@ -46,6 +46,7 @@ import (
 	"github.com/jarodr47/portager/internal/controller/registry"
 	"github.com/jarodr47/portager/internal/controller/schedule"
 	"github.com/jarodr47/portager/internal/controller/sync"
+	"github.com/jarodr47/portager/internal/controller/tags"
 	"github.com/jarodr47/portager/internal/controller/verify"
 )
 
@@ -70,6 +71,10 @@ type ImageSyncReconciler struct {
 	// Validator runs pre-sync validation gates (cosign, vulnerability).
 	// When nil, no validation is performed.
 	Validator *verify.Validator
+
+	// TagResolver resolves semver constraints against registry tags.
+	// When nil, semver filtering is not available.
+	TagResolver *tags.SemverResolver
 }
 
 // +kubebuilder:rbac:groups=portager.portager.io,resources=imagesyncs,verbs=get;list;watch;create;update;patch;delete
@@ -106,6 +111,14 @@ func (r *ImageSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Scheduler.Validate(imageSync.Spec.Schedule); err != nil {
 		return r.updateStatusWithError(ctx, &imageSync, "InvalidSchedule",
 			fmt.Sprintf("invalid schedule: %v", err))
+	}
+
+	// 2b. Validate that each image has at least one of tags or semver.
+	for _, image := range imageSync.Spec.Images {
+		if len(image.Tags) == 0 && image.Semver == "" {
+			return r.updateStatusWithError(ctx, &imageSync, "InvalidSpec",
+				fmt.Sprintf("image %q must specify at least one of tags or semver", image.Name))
+		}
 	}
 
 	// 3. Check for sync-now annotation (bypasses schedule).
@@ -218,7 +231,29 @@ func (r *ImageSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			Name: image.Name,
 		}
 
-		for _, tag := range image.Tags {
+		// Resolve effective tags: explicit tags + semver-discovered tags.
+		effectiveTags := image.Tags
+		if image.Semver != "" && r.TagResolver != nil {
+			srcRepo := fmt.Sprintf("%s/%s", imageSync.Spec.Source.Registry, image.Name)
+			resolved, err := r.TagResolver.ResolveTags(ctx, srcRepo, image.Semver, image.MaxTags, srcAuthn)
+			if err != nil {
+				failedCount++
+				copyErrors = append(copyErrors, err)
+				log.Error(err, "Failed to resolve semver tags", "image", image.Name, "constraint", image.Semver)
+				r.Recorder.Eventf(&imageSync, corev1.EventTypeWarning, "TagResolutionFailed",
+					"Failed to resolve tags for %s matching %q: %v", image.Name, image.Semver, err)
+				portageMetrics.ImagesFailed.WithLabelValues(imageSync.Name, imageSync.Namespace).Inc()
+				imageResults = append(imageResults, imageStatus)
+				continue
+			}
+			log.Info("Resolved semver tags", "image", image.Name, "constraint", image.Semver,
+				"count", len(resolved), "tags", resolved)
+			r.Recorder.Eventf(&imageSync, corev1.EventTypeNormal, "TagsResolved",
+				"Resolved %d tags for %s matching %q", len(resolved), image.Name, image.Semver)
+			effectiveTags = mergeTags(image.Tags, resolved)
+		}
+
+		for _, tag := range effectiveTags {
 			totalCount++
 			now := metav1.Now()
 
@@ -457,6 +492,26 @@ func buildDestRef(dest portagerv1alpha1.DestinationConfig, imageName, tag string
 		return fmt.Sprintf("%s/%s/%s:%s", dest.Registry, dest.RepositoryPrefix, imageName, tag)
 	}
 	return fmt.Sprintf("%s/%s:%s", dest.Registry, imageName, tag)
+}
+
+// mergeTags combines explicit tags with resolved tags, deduplicating.
+// Explicit tags come first, then resolved tags not already present.
+func mergeTags(explicit, resolved []string) []string {
+	seen := make(map[string]bool, len(explicit))
+	result := make([]string, 0, len(explicit)+len(resolved))
+	for _, t := range explicit {
+		if !seen[t] {
+			seen[t] = true
+			result = append(result, t)
+		}
+	}
+	for _, t := range resolved {
+		if !seen[t] {
+			seen[t] = true
+			result = append(result, t)
+		}
+	}
+	return result
 }
 
 // truncateDigest shortens a digest for display in events.

@@ -14,7 +14,23 @@ spec:
     singular: imagesync
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Status
+      type: string
+    - jsonPath: .status.syncedImages
+      name: Synced
+      type: integer
+    - jsonPath: .status.failedImages
+      name: Failed
+      type: integer
+    - jsonPath: .spec.schedule
+      name: Schedule
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: ImageSync is the Schema for the imagesyncs API
@@ -99,21 +115,34 @@ spec:
                   description: ImageSpec defines a single image to sync, including
                     which tags to copy.
                   properties:
+                    maxTags:
+                      default: 10
+                      description: |-
+                        maxTags limits how many semver-matched tags are synced (newest first).
+                        Only applies when semver is set. 0 means unlimited.
+                      minimum: 0
+                      type: integer
                     name:
                       description: |-
                         name is the image name relative to the source registry
                         (e.g., "go", "node", "python").
                       type: string
+                    semver:
+                      description: |-
+                        semver is a semver constraint string for auto-discovering tags from the
+                        source registry. Supports wildcards (1.x, 1.3.x), ranges (>=1.22.0 <1.23.0),
+                        tilde (~1.3.0), and caret (^1.3.0) syntax. Non-semver tags in the registry
+                        are silently skipped. Resolved tags are sorted by version descending (newest first).
+                      type: string
                     tags:
-                      description: tags is the list of image tags to sync (e.g., ["latest",
-                        "1.22"]).
+                      description: |-
+                        tags is the list of explicit image tags to sync (e.g., ["latest", "1.22"]).
+                        At least one of tags or semver must be specified.
                       items:
                         type: string
-                      minItems: 1
                       type: array
                   required:
                   - name
-                  - tags
                   type: object
                 minItems: 1
                 type: array

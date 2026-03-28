@@ -96,6 +96,9 @@ spec:
       tags: ["latest", "3.21"]
     - name: busybox
       tags: ["latest"]
+    # Semver tag filtering: auto-discover matching versions
+    - name: node
+      semver: "^22.0.0"           # Sync the 10 newest Node 22.x releases
 ```
 
 ```bash

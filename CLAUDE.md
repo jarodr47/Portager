@@ -12,7 +12,7 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 
 ## Current Status
 
-**Version:** v0.2.1 (released)
+**Version:** v0.3.0
 
 ### Implemented (Phases 0-4, 6 + Tier 1 + CR.1)
 - CRD types, reconciler, full sync loop
@@ -24,6 +24,7 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 - CI: unit tests, e2e tests, multi-arch build + push, Helm OCI publish, Trivy scanning
 - Supply chain security: all GitHub Actions pinned to commit SHAs, cosign keyless image signing on tagged releases, SBOM generation (SPDX + CycloneDX) attached as OCI attestations, SLSA provenance via `provenance: mode=max`, Dependabot for automated dependency updates
 - Pre-sync validation gates: cosign signature verification (key-based and keyless), vulnerability severity gating via OCI attestation SARIF reports, SBOM existence gate (SPDX + CycloneDX)
+- Semver tag filtering: auto-discover tags matching semver constraints (wildcards, ranges, tilde, caret) with configurable maxTags limit
 
 ### Not Implemented
 
@@ -66,7 +67,6 @@ spec:
 - Key library: `go-containerregistry` has `v1.ImageIndex` and `v1.Platform` types for manifest list manipulation
 
 #### Phase 7 (Stretch Features)
-- **Semver tag filtering** — allow patterns like `semver: >=1.22.0 <1.23.0` that auto-discover matching tags from the source registry
 - **Webhook triggers** — endpoint for registries to call on new image push, triggering immediate sync
 - **ImageSyncPolicy** — cluster-scoped CRD for governance: org-wide defaults (destination, platforms, schedule) and policy controls (allow/deny registries, image name patterns, tag restrictions like blocking `latest`)
 - **Dry-run mode** — `spec.dryRun: true` evaluates what would sync without copying
@@ -106,13 +106,15 @@ make helm-template    # Render Helm templates locally
 │   ├── schedule/                  # Cron parsing via robfig/cron/v3
 │   ├── sync/                      # Image copy via go-containerregistry (crane)
 │   │   └── copier.go              #   ImageCopier with staticKeychain
+│   ├── tags/                      # Semver tag filtering
+│   │   └── resolver.go            #   TagLister, SemverResolver (Masterminds/semver)
 │   └── verify/                    # Pre-sync validation gates
 │       ├── verifier.go            #   Validator, CosignVerifier, VulnerabilityChecker, SbomChecker interfaces
 │       ├── cosign.go              #   Cosign signature verification (key-based + keyless)
 │       ├── vulnerability.go       #   SARIF-based vulnerability severity gating
 │       └── sbom.go                #   SBOM existence gate (SPDX + CycloneDX)
 ├── config/                        # Kustomize manifests (CRDs, RBAC, manager)
-├── helm/portager/                 # Helm chart (v0.2.1)
+├── helm/portager/                 # Helm chart (v0.3.0)
 ├── test/e2e/                      # E2E tests (Kind + Ginkgo)
 ├── docs/
 │   ├── CONFIGURATION.md           # Helm values, auth strategies, spec reference
@@ -135,6 +137,7 @@ make helm-template    # Render Helm templates locally
 | go-containerregistry | 0.21.1 | OCI image operations (crane) |
 | aws-sdk-go-v2 | latest | ECR auth + repo creation |
 | robfig/cron/v3 | 3.0.1 | Cron expression parsing |
+| Masterminds/semver/v3 | 3.4.0 | Semver constraint parsing and matching |
 | sigstore/cosign/v2 | 2.6.2 | Cosign signature verification |
 | Ginkgo v2 / Gomega | 2.27+ | Testing framework |
 | Kubebuilder | 4.12.0 | Scaffolding (go.kubebuilder.io/v4) |
@@ -165,15 +168,17 @@ Reconcile(ImageSync) →
   5. Check if due based on nextSyncTime → requeue if not (only when spec unchanged)
   6. Build source/dest authenticators (anonymous, secret, or ECR)
   7. If createDestinationRepos + ECR → ensure repos exist
-  8. For each image+tag:
+  8. For each image:
+     - If semver set → list tags from source, filter by constraint, merge with explicit tags
+  9. For each image+tag:
      a. GetDigest on source (HTTP HEAD, no layer download)
      b. GetDigest on destination (may fail if not pushed yet)
      c. If digests match → skip, emit ImageSkipped event
      d. If validation configured → run cosign/vulnerability gates, emit ImageVerified or ValidationFailed
      e. If different/missing → crane.Copy, emit ImageSynced or SyncFailed
-  9. Update .status (conditions, per-image results, summary counts, observedGeneration)
- 10. Emit SyncComplete event
- 11. Requeue after next schedule interval
+ 10. Update .status (conditions, per-image results, summary counts, observedGeneration)
+ 11. Emit SyncComplete event
+ 12. Requeue after next schedule interval
 ```
 
 ### Key Design Patterns
@@ -199,7 +204,7 @@ ImageSyncStatus
 
 ### Events Emitted
 
-`RepoEnsured`, `ImageSynced`, `ImageSkipped`, `ImageVerified`, `ValidationFailed`, `SyncFailed`, `SyncComplete`
+`RepoEnsured`, `TagsResolved`, `TagResolutionFailed`, `ImageSynced`, `ImageSkipped`, `ImageVerified`, `ValidationFailed`, `SyncFailed`, `SyncComplete`
 
 ### Prometheus Metrics
 

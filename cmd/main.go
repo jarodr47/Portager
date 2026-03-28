@@ -38,6 +38,7 @@ import (
 	portagerv1alpha1 "github.com/jarodr47/portager/api/v1alpha1"
 	"github.com/jarodr47/portager/internal/controller"
 	"github.com/jarodr47/portager/internal/controller/schedule"
+	"github.com/jarodr47/portager/internal/controller/tags"
 	"github.com/jarodr47/portager/internal/controller/verify"
 	// +kubebuilder:scaffold:imports
 )
@@ -189,6 +190,9 @@ func main() {
 			CosignVerifier:       verify.NewCosignVerifier(),
 			VulnerabilityChecker: verify.NewVulnerabilityChecker(),
 			SbomChecker:          verify.NewSbomChecker(),
+		},
+		TagResolver: &tags.SemverResolver{
+			Lister: &tags.CraneTagLister{},
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "ImageSync")

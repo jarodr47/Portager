@@ -63,6 +63,8 @@ Portager fills this gap with a Kubernetes-native, GitOps-friendly approach that 
 - **Registry-agnostic** — Works with Docker Hub, GHCR, Quay, Chainguard, ECR, GCR, Harbor, Nexus, and any OCI-compliant registry
 - **Pluggable auth** — Kubernetes Secrets (`dockerconfigjson`), ECR via IRSA, or anonymous for public registries
 - **Cron scheduling** — Standard cron expressions, shorthands like `@every 6h`, and on-demand sync via annotation
+- **Semver tag filtering** — Auto-discover tags matching semver constraints like `1.x`, `~1.22.0`, or `^22.0.0` instead of listing every tag
+- **Pre-sync validation** — Optional cosign signature verification, vulnerability severity gating (SARIF), and SBOM existence checks before copying
 - **Observable** — Per-image status on the resource, Kubernetes Events, and custom Prometheus metrics
 
 ## Installation
@@ -76,7 +78,7 @@ Portager fills this gap with a Kubernetes-native, GitOps-friendly approach that 
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  --version 0.2.1 -n portager-system --create-namespace
+  --version 0.3.0 -n portager-system --create-namespace
 ```
 
 <details>
@@ -121,7 +123,8 @@ spec:
     - name: alpine
       tags: ["3.21", "latest"]
     - name: nginx
-      tags: ["1.27", "latest"]
+      tags: ["latest"]
+      semver: "~1.27.0"          # auto-sync newest 1.27.x patch releases
 ```
 
 ```bash

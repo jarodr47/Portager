@@ -174,9 +174,13 @@ spec:
       enabled: true                # Require SBOM (SPDX or CycloneDX) attached
   images:
     - name: go
-      tags: ["latest", "1.22"]
+      tags: ["latest", "1.22"]     # Explicit tags
     - name: python
-      tags: ["latest", "3.12"]
+      semver: "3.12.x"             # Auto-discover matching semver tags
+      maxTags: 10                   # Limit to 10 newest matches (default)
+    - name: node
+      tags: ["lts"]                # Explicit + semver together
+      semver: "^22.0.0"
 ```
 
 ### Schedule Examples
@@ -200,6 +204,72 @@ kubectl annotate imagesync <name> portager.portager.io/sync-now=true
 ```
 
 The controller removes the annotation after processing.
+
+---
+
+## Semver Tag Filtering
+
+Instead of listing every tag explicitly, you can use a semver constraint to auto-discover matching tags from the source registry. On each reconcile, the controller lists all tags, parses them as semver versions, filters by the constraint, and syncs the newest matches.
+
+### Constraint Syntax
+
+Portager uses [Masterminds/semver](https://github.com/Masterminds/semver) constraint syntax:
+
+| Pattern | Meaning | Example Matches |
+|---|---|---|
+| `1.x` | Any 1.y.z | 1.0, 1.5.3, 1.99 |
+| `1.3.x` | Any 1.3.z | 1.3.0, 1.3.7 |
+| `>= 1.22.0, < 1.23.0` | Range | 1.22.0, 1.22.5 |
+| `~1.3.0` | Tilde (patch-level) | >= 1.3.0, < 1.4.0 |
+| `^1.3.0` | Caret (minor-level) | >= 1.3.0, < 2.0.0 |
+
+### Examples
+
+```yaml
+# Sync the 10 newest 1.x versions of alpine
+images:
+  - name: alpine
+    semver: "1.x"
+
+# Sync Go 1.22 patch releases + latest
+images:
+  - name: go
+    tags: ["latest"]
+    semver: "~1.22.0"
+
+# Sync all Python 3.12.x versions (unlimited)
+images:
+  - name: python
+    semver: "3.12.x"
+    maxTags: 0
+```
+
+### Fields
+
+| Field | Default | Description |
+|---|---|---|
+| `semver` | — | Semver constraint string. When set, the controller lists tags from the source registry and syncs those matching the constraint. |
+| `maxTags` | `10` | Maximum number of semver-matched tags to sync (newest first). Set to `0` for unlimited. Only applies when `semver` is set. |
+
+### Behavior
+
+- **Explicit tags (`tags`) and `semver` can be used together.** The controller merges both lists, deduplicating. Explicit tags are synced first, then semver-resolved tags.
+- **At least one of `tags` or `semver` must be specified** per image. The controller rejects the ImageSync with an `InvalidSpec` condition if neither is provided.
+- **Non-semver tags are silently skipped.** Tags like `latest`, `alpine`, or `bullseye` are not valid semver and won't match any constraint. Use explicit `tags` for these.
+- **Tags with pre-release suffixes** (e.g., `1.22.1-rc.1`) only match constraints that explicitly include pre-release identifiers.
+- **`v` prefixes are handled automatically** — `v1.22.0` is treated as `1.22.0` for matching but synced under its original tag string.
+- **Resolved tags appear in `.status.images[].tags[]`** just like explicit tags, with full digest and sync status tracking.
+
+### Events
+
+| Event | Type | When |
+|---|---|---|
+| `TagsResolved` | Normal | Semver constraint resolved N tags for an image |
+| `TagResolutionFailed` | Warning | Failed to list tags or parse constraint |
+
+### Rate Limiting Note
+
+Each reconcile calls the registry's tag listing API once per image with a `semver` constraint. For registries with rate limits (e.g., Docker Hub), keep this in mind when setting short cron schedules.
 
 ---
 

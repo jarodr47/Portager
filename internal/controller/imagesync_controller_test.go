@@ -36,6 +36,8 @@ import (
 	"github.com/jarodr47/portager/internal/controller/verify"
 
 	"github.com/google/go-containerregistry/pkg/authn"
+
+	"github.com/jarodr47/portager/internal/controller/tags"
 )
 
 // newReconciler creates a reconciler wired with a FakeRecorder and Scheduler.
@@ -83,6 +85,27 @@ func newReconcilerWithValidator(rec *record.FakeRecorder, v *verify.Validator) *
 		Recorder:  rec,
 		Scheduler: schedule.NewScheduler(),
 		Validator: v,
+	}
+}
+
+// mockTagLister implements tags.TagLister for testing.
+type mockTagLister struct {
+	tags []string
+	err  error
+}
+
+func (m *mockTagLister) ListTags(_ context.Context, _ string, _ authn.Authenticator) ([]string, error) {
+	return m.tags, m.err
+}
+
+// newReconcilerWithTagResolver creates a reconciler with a custom TagResolver.
+func newReconcilerWithTagResolver(rec *record.FakeRecorder, resolver *tags.SemverResolver) *ImageSyncReconciler {
+	return &ImageSyncReconciler{
+		Client:      k8sClient,
+		Scheme:      k8sClient.Scheme(),
+		Recorder:    rec,
+		Scheduler:   schedule.NewScheduler(),
+		TagResolver: resolver,
 	}
 }
 
@@ -573,6 +596,192 @@ var _ = Describe("ImageSync Controller", func() {
 			Expect(readyCond).NotTo(BeNil())
 			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
 			Expect(readyCond.Reason).To(Equal("InvalidSchedule"))
+
+			// Cleanup.
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+	})
+
+	Context("Semver Tag Filtering", func() {
+		ctx := context.Background()
+
+		It("should resolve semver tags and attempt sync for each matched tag", func() {
+			resourceName := "test-semver-resolve"
+			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &portagerv1alpha1.ImageSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: portagerv1alpha1.ImageSyncSpec{
+					Schedule: "@every 1h",
+					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
+					Destination: portagerv1alpha1.DestinationConfig{
+						Registry: "localhost:5000",
+						Auth:     portagerv1alpha1.AuthConfig{Method: "anonymous"},
+					},
+					Images: []portagerv1alpha1.ImageSpec{
+						{
+							Name:   "alpine",
+							Semver: "1.x",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			fakeRecorder := record.NewFakeRecorder(100)
+			lister := &mockTagLister{tags: []string{"1.0", "1.1", "1.2", "2.0", "latest"}}
+			resolver := &tags.SemverResolver{Lister: lister}
+			reconciler := newReconcilerWithTagResolver(fakeRecorder, resolver)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			// Fake registry fails at digest — but sync was attempted for resolved tags.
+			Expect(err).To(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
+
+			// Should have resolved 3 tags (1.2, 1.1, 1.0) matching 1.x.
+			Expect(resource.Status.Images).To(HaveLen(1))
+			Expect(resource.Status.Images[0].Tags).To(HaveLen(3))
+			Expect(resource.Status.TotalImages).To(Equal(3))
+
+			// Verify TagsResolved event was emitted.
+			Expect(fakeRecorder.Events).To(Receive(ContainSubstring("TagsResolved")))
+
+			// Cleanup.
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should merge explicit tags with semver-resolved tags", func() {
+			resourceName := "test-semver-merge"
+			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &portagerv1alpha1.ImageSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: portagerv1alpha1.ImageSyncSpec{
+					Schedule: "@every 1h",
+					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
+					Destination: portagerv1alpha1.DestinationConfig{
+						Registry: "localhost:5000",
+						Auth:     portagerv1alpha1.AuthConfig{Method: "anonymous"},
+					},
+					Images: []portagerv1alpha1.ImageSpec{
+						{
+							Name:   "alpine",
+							Tags:   []string{"latest", "1.2"},
+							Semver: "1.x",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			fakeRecorder := record.NewFakeRecorder(100)
+			// Semver resolves 1.2, 1.1, 1.0 — but 1.2 is already in explicit tags.
+			lister := &mockTagLister{tags: []string{"1.0", "1.1", "1.2", "2.0"}}
+			resolver := &tags.SemverResolver{Lister: lister}
+			reconciler := newReconcilerWithTagResolver(fakeRecorder, resolver)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).To(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
+
+			// Explicit: [latest, 1.2] + Resolved: [1.2, 1.1, 1.0] → Merged: [latest, 1.2, 1.1, 1.0]
+			Expect(resource.Status.Images[0].Tags).To(HaveLen(4))
+			Expect(resource.Status.TotalImages).To(Equal(4))
+
+			// Cleanup.
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should reject ImageSync with neither tags nor semver", func() {
+			resourceName := "test-semver-no-tags"
+			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &portagerv1alpha1.ImageSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: portagerv1alpha1.ImageSyncSpec{
+					Schedule: "@every 1h",
+					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
+					Destination: portagerv1alpha1.DestinationConfig{
+						Registry: "localhost:5000",
+						Auth:     portagerv1alpha1.AuthConfig{Method: "anonymous"},
+					},
+					Images: []portagerv1alpha1.ImageSpec{
+						{Name: "alpine"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			fakeRecorder := record.NewFakeRecorder(100)
+			reconciler := newReconciler(fakeRecorder)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("InvalidSpec"))
+
+			// Verify Ready condition is False with InvalidSpec reason.
+			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
+			readyCond := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+			Expect(readyCond).NotTo(BeNil())
+			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(readyCond.Reason).To(Equal("InvalidSpec"))
+
+			// Cleanup.
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should handle tag resolution failure gracefully", func() {
+			resourceName := "test-semver-fail"
+			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &portagerv1alpha1.ImageSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: portagerv1alpha1.ImageSyncSpec{
+					Schedule: "@every 1h",
+					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
+					Destination: portagerv1alpha1.DestinationConfig{
+						Registry: "localhost:5000",
+						Auth:     portagerv1alpha1.AuthConfig{Method: "anonymous"},
+					},
+					Images: []portagerv1alpha1.ImageSpec{
+						{
+							Name:   "alpine",
+							Semver: "1.x",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			fakeRecorder := record.NewFakeRecorder(100)
+			lister := &mockTagLister{err: fmt.Errorf("registry timeout")}
+			resolver := &tags.SemverResolver{Lister: lister}
+			reconciler := newReconcilerWithTagResolver(fakeRecorder, resolver)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			Expect(err).To(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
+
+			// Image should show as failed due to tag resolution error.
+			Expect(resource.Status.FailedImages).To(Equal(1))
+
+			// Verify TagResolutionFailed event was emitted.
+			Expect(fakeRecorder.Events).To(Receive(ContainSubstring("TagResolutionFailed")))
 
 			// Cleanup.
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())

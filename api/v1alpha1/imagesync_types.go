@@ -129,6 +129,17 @@ type ValidationConfig struct {
 	// vulnerabilityGate configures vulnerability severity gating.
 	// +optional
 	VulnerabilityGate *VulnerabilityGateConfig `json:"vulnerabilityGate,omitempty"`
+
+	// sbomGate requires a Software Bill of Materials (SBOM) to be attached
+	// as an OCI referrer before allowing sync. Supports SPDX and CycloneDX formats.
+	// +optional
+	SbomGate *SbomGateConfig `json:"sbomGate,omitempty"`
+}
+
+// SbomGateConfig requires an SBOM (SPDX or CycloneDX) to be attached as an OCI referrer.
+type SbomGateConfig struct {
+	// enabled activates SBOM gate checking.
+	Enabled bool `json:"enabled"`
 }
 
 // CosignConfig configures cosign signature verification for source images.

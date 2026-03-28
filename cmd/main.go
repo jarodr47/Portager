@@ -188,6 +188,7 @@ func main() {
 		Validator: &verify.Validator{
 			CosignVerifier:       verify.NewCosignVerifier(),
 			VulnerabilityChecker: verify.NewVulnerabilityChecker(),
+			SbomChecker:          verify.NewSbomChecker(),
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "ImageSync")

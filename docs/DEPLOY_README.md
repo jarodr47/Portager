@@ -388,6 +388,19 @@ kubectl get imagesync myapp -o jsonpath='{.status.images[0].tags[0].validationEr
 # vulnerability gate: 2 finding(s) at or above high severity: CVE-2024-001 (critical), CVE-2024-002 (high)
 ```
 
+### SBOM Gate
+
+Require that images have an SBOM (SPDX or CycloneDX) attached before syncing:
+
+```yaml
+spec:
+  validation:
+    sbomGate:
+      enabled: true
+```
+
+Images without an SBOM are blocked. See [Configuration — SBOM Gate](CONFIGURATION.md#sbom-gate) for details on how to attach SBOMs.
+
 ---
 
 ## How It Works Internally

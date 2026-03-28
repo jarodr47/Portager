@@ -170,6 +170,8 @@ spec:
       enabled: true
       maxSeverity: high            # Block on high + critical
       requireCveReport: true       # Block if no SARIF report found (default)
+    sbomGate:
+      enabled: true                # Require SBOM (SPDX or CycloneDX) attached
   images:
     - name: go
       tags: ["latest", "1.22"]
@@ -289,6 +291,31 @@ This appears in the `ValidationFailed` event and in `.status.images[].tags[].val
 | No SARIF report, `requireCveReport: false` | Sync proceeds |
 | Non-SARIF referrer attached | Skipped (no error) |
 
+### SBOM Gate
+
+Require that a Software Bill of Materials (SBOM) is attached as an OCI referrer before allowing sync. Supports SPDX (`application/spdx+json`) and CycloneDX (`application/vnd.cyclonedx+json`) formats.
+
+```yaml
+spec:
+  validation:
+    sbomGate:
+      enabled: true
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | `bool` | `false` | Require an SBOM to be attached to the source image |
+
+When enabled, images without an SPDX or CycloneDX SBOM attached as an OCI referrer are blocked. This is a compliance gate — it verifies the SBOM exists, it does not inspect its contents.
+
+**How to attach an SBOM:**
+
+```bash
+# Generate and attach an SPDX SBOM
+trivy image --format spdx-json --output sbom.spdx.json myregistry/myimage:v1.0
+oras attach myregistry/myimage:v1.0 --artifact-type application/spdx+json sbom.spdx.json
+```
+
 ### Combined Example
 
 ```yaml
@@ -304,9 +331,11 @@ spec:
       enabled: true
       maxSeverity: high
       requireCveReport: true
+    sbomGate:
+      enabled: true
 ```
 
-When both gates are enabled, cosign verification runs first. If it fails, the vulnerability gate is skipped. The `ValidationFailed` event and `.status.images[].tags[].validationError` field indicate which gate failed and why.
+When multiple gates are enabled, they run in order: cosign → vulnerability → SBOM. If any gate fails, subsequent gates are skipped. The `ValidationFailed` event and `.status.images[].tags[].validationError` field indicate which gate failed and why.
 
 ### Events
 

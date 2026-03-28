@@ -66,6 +66,15 @@ func (m *mockVulnerabilityChecker) CheckVulnerabilities(_ context.Context, _ str
 	return m.err
 }
 
+// mockSbomCheckerIntegration implements verify.SbomChecker for testing.
+type mockSbomCheckerIntegration struct {
+	err error
+}
+
+func (m *mockSbomCheckerIntegration) CheckSbom(_ context.Context, _ string, _ *portagerv1alpha1.SbomGateConfig, _ authn.Authenticator) error {
+	return m.err
+}
+
 // newReconcilerWithValidator creates a reconciler with a custom Validator.
 func newReconcilerWithValidator(rec *record.FakeRecorder, v *verify.Validator) *ImageSyncReconciler {
 	return &ImageSyncReconciler{
@@ -510,6 +519,7 @@ var _ = Describe("ImageSync Controller", func() {
 			validator := &verify.Validator{
 				CosignVerifier:       &mockCosignVerifier{err: fmt.Errorf("no matching signatures")},
 				VulnerabilityChecker: &mockVulnerabilityChecker{},
+				SbomChecker:          &mockSbomCheckerIntegration{},
 			}
 			reconciler := newReconcilerWithValidator(fakeRecorder, validator)
 

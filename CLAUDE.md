@@ -23,7 +23,7 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 - Prometheus metrics, Helm chart, leader election
 - CI: unit tests, e2e tests, multi-arch build + push, Helm OCI publish, Trivy scanning
 - Supply chain security: all GitHub Actions pinned to commit SHAs, cosign keyless image signing on tagged releases, SBOM generation (SPDX + CycloneDX) attached as OCI attestations, SLSA provenance via `provenance: mode=max`, Dependabot for automated dependency updates
-- Pre-sync validation gates: cosign signature verification (key-based and keyless), vulnerability severity gating via OCI attestation SARIF reports
+- Pre-sync validation gates: cosign signature verification (key-based and keyless), vulnerability severity gating via OCI attestation SARIF reports, SBOM existence gate (SPDX + CycloneDX)
 
 ### Not Implemented
 
@@ -107,9 +107,10 @@ make helm-template    # Render Helm templates locally
 │   ├── sync/                      # Image copy via go-containerregistry (crane)
 │   │   └── copier.go              #   ImageCopier with staticKeychain
 │   └── verify/                    # Pre-sync validation gates
-│       ├── verifier.go            #   Validator, CosignVerifier, VulnerabilityChecker interfaces
+│       ├── verifier.go            #   Validator, CosignVerifier, VulnerabilityChecker, SbomChecker interfaces
 │       ├── cosign.go              #   Cosign signature verification (key-based + keyless)
-│       └── vulnerability.go       #   SARIF-based vulnerability severity gating
+│       ├── vulnerability.go       #   SARIF-based vulnerability severity gating
+│       └── sbom.go                #   SBOM existence gate (SPDX + CycloneDX)
 ├── config/                        # Kustomize manifests (CRDs, RBAC, manager)
 ├── helm/portager/                 # Helm chart (v0.2.1)
 ├── test/e2e/                      # E2E tests (Kind + Ginkgo)

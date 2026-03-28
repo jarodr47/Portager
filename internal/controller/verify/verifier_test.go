@@ -19,12 +19,22 @@ func (m *mockVulnChecker) CheckVulnerabilities(_ context.Context, _ string, _ *p
 	return m.err
 }
 
+// mockSbomChecker implements SbomChecker for testing.
+type mockSbomChecker struct {
+	err error
+}
+
+func (m *mockSbomChecker) CheckSbom(_ context.Context, _ string, _ *portagerv1alpha1.SbomGateConfig, _ authn.Authenticator) error {
+	return m.err
+}
+
 func TestValidator_Validate(t *testing.T) {
 	tests := []struct {
 		name       string
 		config     *portagerv1alpha1.ValidationConfig
 		cosignErr  error
 		vulnErr    error
+		sbomErr    error
 		wantVerify bool
 		wantErr    bool
 	}{
@@ -109,6 +119,42 @@ func TestValidator_Validate(t *testing.T) {
 			wantVerify: false,
 			wantErr:    true,
 		},
+		{
+			name: "sbom gate enabled and passes",
+			config: &portagerv1alpha1.ValidationConfig{
+				SbomGate: &portagerv1alpha1.SbomGateConfig{Enabled: true},
+			},
+			wantVerify: true,
+		},
+		{
+			name: "sbom gate enabled and fails",
+			config: &portagerv1alpha1.ValidationConfig{
+				SbomGate: &portagerv1alpha1.SbomGateConfig{Enabled: true},
+			},
+			sbomErr:    errors.New("no SBOM found"),
+			wantVerify: false,
+			wantErr:    true,
+		},
+		{
+			name: "all gates pass",
+			config: &portagerv1alpha1.ValidationConfig{
+				Cosign:            &portagerv1alpha1.CosignConfig{Enabled: true, PublicKey: "test-key"},
+				VulnerabilityGate: &portagerv1alpha1.VulnerabilityGateConfig{Enabled: true, MaxSeverity: "high"},
+				SbomGate:          &portagerv1alpha1.SbomGateConfig{Enabled: true},
+			},
+			wantVerify: true,
+		},
+		{
+			name: "cosign and vuln pass but sbom fails",
+			config: &portagerv1alpha1.ValidationConfig{
+				Cosign:            &portagerv1alpha1.CosignConfig{Enabled: true, PublicKey: "test-key"},
+				VulnerabilityGate: &portagerv1alpha1.VulnerabilityGateConfig{Enabled: true, MaxSeverity: "high"},
+				SbomGate:          &portagerv1alpha1.SbomGateConfig{Enabled: true},
+			},
+			sbomErr:    errors.New("no SBOM found"),
+			wantVerify: false,
+			wantErr:    true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -116,6 +162,7 @@ func TestValidator_Validate(t *testing.T) {
 			v := &Validator{
 				CosignVerifier:       &mockCosignVerifier{err: tt.cosignErr},
 				VulnerabilityChecker: &mockVulnChecker{err: tt.vulnErr},
+				SbomChecker:          &mockSbomChecker{err: tt.sbomErr},
 			}
 
 			result := v.Validate(context.Background(), "fake-registry.invalid/test:latest", tt.config, authn.Anonymous)

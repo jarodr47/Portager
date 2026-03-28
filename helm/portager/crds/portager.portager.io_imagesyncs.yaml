@@ -172,6 +172,17 @@ spec:
                     required:
                     - enabled
                     type: object
+                  sbomGate:
+                    description: |-
+                      sbomGate requires a Software Bill of Materials (SBOM) to be attached
+                      as an OCI referrer before allowing sync. Supports SPDX and CycloneDX formats.
+                    properties:
+                      enabled:
+                        description: enabled activates SBOM gate checking.
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
                   vulnerabilityGate:
                     description: vulnerabilityGate configures vulnerability severity
                       gating.

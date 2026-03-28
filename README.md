@@ -76,7 +76,7 @@ Portager fills this gap with a Kubernetes-native, GitOps-friendly approach that 
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  --version 0.2.0 -n portager-system --create-namespace
+  --version 0.2.1 -n portager-system --create-namespace
 ```
 
 <details>

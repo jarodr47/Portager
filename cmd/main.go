@@ -38,6 +38,7 @@ import (
 	portagerv1alpha1 "github.com/jarodr47/portager/api/v1alpha1"
 	"github.com/jarodr47/portager/internal/controller"
 	"github.com/jarodr47/portager/internal/controller/schedule"
+	"github.com/jarodr47/portager/internal/controller/verify"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -184,6 +185,11 @@ func main() {
 		Scheme:    mgr.GetScheme(),
 		Recorder:  mgr.GetEventRecorderFor("imagesync-controller"),
 		Scheduler: schedule.NewScheduler(),
+		Validator: &verify.Validator{
+			CosignVerifier:       verify.NewCosignVerifier(),
+			VulnerabilityChecker: verify.NewVulnerabilityChecker(),
+			SbomChecker:          verify.NewSbomChecker(),
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "ImageSync")
 		os.Exit(1)

@@ -344,6 +344,65 @@ spec:
 
 ---
 
+## Pre-Sync Validation
+
+Portager supports optional validation gates that verify source images before copying. See [Configuration — Pre-Sync Validation](CONFIGURATION.md#pre-sync-validation) for the full reference.
+
+### Cosign Signature Verification
+
+Require images to be signed before syncing. Works with both key-based and keyless (Fulcio) verification:
+
+```yaml
+spec:
+  validation:
+    cosign:
+      enabled: true
+      keylessIssuer: "https://token.actions.githubusercontent.com"
+  images:
+    - name: static
+      tags: ["latest"]
+```
+
+Unsigned images are blocked with a `ValidationFailed` event. Signed images proceed to sync.
+
+### Vulnerability Severity Gate
+
+Block images with vulnerability findings above a severity threshold. Requires a SARIF scan report attached as an OCI referrer to the source image (see [Configuration](CONFIGURATION.md#vulnerability-gate) for how to attach reports):
+
+```yaml
+spec:
+  validation:
+    vulnerabilityGate:
+      enabled: true
+      maxSeverity: high           # Block high + critical (default: critical)
+      requireCveReport: true      # Block if no report found (default)
+  images:
+    - name: myapp
+      tags: ["v1.0"]
+```
+
+When a finding exceeds the threshold, the status shows the specific CVEs:
+
+```bash
+kubectl get imagesync myapp -o jsonpath='{.status.images[0].tags[0].validationError}'
+# vulnerability gate: 2 finding(s) at or above high severity: CVE-2024-001 (critical), CVE-2024-002 (high)
+```
+
+### SBOM Gate
+
+Require that images have an SBOM (SPDX or CycloneDX) attached before syncing:
+
+```yaml
+spec:
+  validation:
+    sbomGate:
+      enabled: true
+```
+
+Images without an SBOM are blocked. See [Configuration — SBOM Gate](CONFIGURATION.md#sbom-gate) for details on how to attach SBOMs.
+
+---
+
 ## How It Works Internally
 
 The reconcile loop for an ImageSync with `method: ecr` and `createDestinationRepos: true`:
@@ -370,7 +429,8 @@ The reconcile loop for an ImageSync with `method: ecr` and `createDestinationRep
     a. Get source digest (HEAD request, no layer download)
     b. Get destination digest
     c. If digests match -> skip, emit "ImageSkipped"
-    d. If different or missing -> crane.Copy, emit "ImageSynced"
+    d. If validation configured -> run cosign/vulnerability gates, emit "ImageVerified" or "ValidationFailed"
+    e. If different or missing -> crane.Copy, emit "ImageSynced"
 10. Update status: conditions, per-image results, counts, observedGeneration
 11. Record Prometheus metrics (sync_total, duration, copied/skipped/failed)
 12. Compute nextSyncTime from cron schedule, requeue with RequeueAfter

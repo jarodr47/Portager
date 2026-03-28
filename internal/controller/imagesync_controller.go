@@ -46,6 +46,7 @@ import (
 	"github.com/jarodr47/portager/internal/controller/registry"
 	"github.com/jarodr47/portager/internal/controller/schedule"
 	"github.com/jarodr47/portager/internal/controller/sync"
+	"github.com/jarodr47/portager/internal/controller/verify"
 )
 
 // SyncNowAnnotation is the annotation key users set to "true" to trigger an
@@ -65,6 +66,10 @@ type ImageSyncReconciler struct {
 
 	// Scheduler parses cron expressions and computes the next sync time.
 	Scheduler *schedule.Scheduler
+
+	// Validator runs pre-sync validation gates (cosign, vulnerability).
+	// When nil, no validation is performed.
+	Validator *verify.Validator
 }
 
 // +kubebuilder:rbac:groups=portager.portager.io,resources=imagesyncs,verbs=get;list;watch;create;update;patch;delete
@@ -258,7 +263,30 @@ func (r *ImageSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				continue
 			}
 
-			// 4d. Digests differ or destination doesn't exist — copy the image.
+			// 4d. Pre-sync validation gates (cosign, vulnerability).
+			if imageSync.Spec.Validation != nil && r.Validator != nil {
+				vResult := r.Validator.Validate(ctx, srcRef, imageSync.Spec.Validation, srcAuthn)
+				tagStatus.Verified = vResult.Verified
+				if !vResult.Verified {
+					failedCount++
+					tagStatus.Synced = false
+					tagStatus.ValidationError = vResult.Error
+					tagStatus.Error = fmt.Sprintf("validation failed: %s", vResult.Error)
+					copyErrors = append(copyErrors, fmt.Errorf("validation failed for %s: %s", srcRef, vResult.Error))
+					log.Error(fmt.Errorf("%s", vResult.Error), "Pre-sync validation failed", "image", srcRef)
+					r.Recorder.Eventf(&imageSync, corev1.EventTypeWarning, "ValidationFailed",
+						"Validation failed for %s: %s", srcRef, vResult.Error)
+					portageMetrics.ImagesValidationFailed.WithLabelValues(
+						imageSync.Name, imageSync.Namespace, "validation").Inc()
+					imageStatus.Tags = append(imageStatus.Tags, tagStatus)
+					continue
+				}
+				r.Recorder.Eventf(&imageSync, corev1.EventTypeNormal, "ImageVerified",
+					"Validation passed for %s", srcRef)
+				portageMetrics.ImagesVerified.WithLabelValues(imageSync.Name, imageSync.Namespace).Inc()
+			}
+
+			// 4e. Digests differ or destination doesn't exist — copy the image.
 			if err := copier.Copy(ctx, srcRef, dstRef, srcAuthn, dstAuthn); err != nil {
 				failedCount++
 				tagStatus.Synced = false

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -32,6 +33,9 @@ import (
 
 	portagerv1alpha1 "github.com/jarodr47/portager/api/v1alpha1"
 	"github.com/jarodr47/portager/internal/controller/schedule"
+	"github.com/jarodr47/portager/internal/controller/verify"
+
+	"github.com/google/go-containerregistry/pkg/authn"
 )
 
 // newReconciler creates a reconciler wired with a FakeRecorder and Scheduler.
@@ -41,6 +45,44 @@ func newReconciler(rec *record.FakeRecorder) *ImageSyncReconciler {
 		Scheme:    k8sClient.Scheme(),
 		Recorder:  rec,
 		Scheduler: schedule.NewScheduler(),
+	}
+}
+
+// mockCosignVerifier implements verify.CosignVerifier for testing.
+type mockCosignVerifier struct {
+	err error
+}
+
+func (m *mockCosignVerifier) VerifySignature(_ context.Context, _ string, _ *portagerv1alpha1.CosignConfig) error {
+	return m.err
+}
+
+// mockVulnerabilityChecker implements verify.VulnerabilityChecker for testing.
+type mockVulnerabilityChecker struct {
+	err error
+}
+
+func (m *mockVulnerabilityChecker) CheckVulnerabilities(_ context.Context, _ string, _ *portagerv1alpha1.VulnerabilityGateConfig, _ authn.Authenticator) error {
+	return m.err
+}
+
+// mockSbomCheckerIntegration implements verify.SbomChecker for testing.
+type mockSbomCheckerIntegration struct {
+	err error
+}
+
+func (m *mockSbomCheckerIntegration) CheckSbom(_ context.Context, _ string, _ *portagerv1alpha1.SbomGateConfig, _ authn.Authenticator) error {
+	return m.err
+}
+
+// newReconcilerWithValidator creates a reconciler with a custom Validator.
+func newReconcilerWithValidator(rec *record.FakeRecorder, v *verify.Validator) *ImageSyncReconciler {
+	return &ImageSyncReconciler{
+		Client:    k8sClient,
+		Scheme:    k8sClient.Scheme(),
+		Recorder:  rec,
+		Scheduler: schedule.NewScheduler(),
+		Validator: v,
 	}
 }
 
@@ -434,6 +476,62 @@ var _ = Describe("ImageSync Controller", func() {
 			readyCond := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
 			Expect(readyCond).NotTo(BeNil())
 			Expect(readyCond.Status).To(Equal(metav1.ConditionFalse))
+
+			// Cleanup.
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should accept ImageSync with validation config and behave normally when digest fails first", func() {
+			resourceName := "test-validation-crd"
+			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
+
+			resource := &portagerv1alpha1.ImageSync{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: portagerv1alpha1.ImageSyncSpec{
+					Schedule: "@every 1h",
+					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
+					Destination: portagerv1alpha1.DestinationConfig{
+						Registry: "localhost:5000",
+						Auth:     portagerv1alpha1.AuthConfig{Method: "anonymous"},
+					},
+					Images: []portagerv1alpha1.ImageSpec{
+						{Name: "alpine", Tags: []string{"latest"}},
+					},
+					Validation: &portagerv1alpha1.ValidationConfig{
+						Cosign: &portagerv1alpha1.CosignConfig{
+							Enabled:   true,
+							PublicKey: "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----",
+						},
+						VulnerabilityGate: &portagerv1alpha1.VulnerabilityGateConfig{
+							Enabled:     true,
+							MaxSeverity: "high",
+						},
+					},
+				},
+			}
+			// CRD should accept the new validation fields.
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			fakeRecorder := record.NewFakeRecorder(100)
+			validator := &verify.Validator{
+				CosignVerifier:       &mockCosignVerifier{err: fmt.Errorf("no matching signatures")},
+				VulnerabilityChecker: &mockVulnerabilityChecker{},
+				SbomChecker:          &mockSbomCheckerIntegration{},
+			}
+			reconciler := newReconcilerWithValidator(fakeRecorder, validator)
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: nn})
+			// With fake-registry.invalid, GetDigest fails before validation is reached.
+			// This verifies that validation config doesn't break existing reconcile flow.
+			Expect(err).To(HaveOccurred())
+
+			// Re-fetch and verify status reflects digest failure (not validation).
+			Expect(k8sClient.Get(ctx, nn, resource)).To(Succeed())
+			Expect(resource.Status.FailedImages).To(Equal(1))
+			Expect(resource.Status.Images[0].Tags[0].Error).To(ContainSubstring("failed to get source digest"))
 
 			// Cleanup.
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())

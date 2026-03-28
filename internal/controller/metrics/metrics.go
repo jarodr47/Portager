@@ -77,4 +77,22 @@ var (
 		},
 		[]string{"name", "namespace", "synced", "failed", "total"},
 	)
+
+	// ImagesValidationFailed counts images that failed pre-sync validation.
+	ImagesValidationFailed = promauto.With(metrics.Registry).NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "portage_images_validation_failed_total",
+			Help: "Total number of images that failed pre-sync validation",
+		},
+		[]string{"name", "namespace", "gate"},
+	)
+
+	// ImagesVerified counts images that passed pre-sync validation.
+	ImagesVerified = promauto.With(metrics.Registry).NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "portage_images_verified_total",
+			Help: "Total number of images that passed pre-sync validation",
+		},
+		[]string{"name", "namespace"},
+	)
 )

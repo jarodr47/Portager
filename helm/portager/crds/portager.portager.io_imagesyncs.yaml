@@ -148,6 +148,71 @@ spec:
                 required:
                 - registry
                 type: object
+              validation:
+                description: |-
+                  validation configures optional pre-sync validation gates (cosign, vulnerability).
+                  When nil, no validation is performed.
+                properties:
+                  cosign:
+                    description: cosign configures cosign signature verification.
+                    properties:
+                      enabled:
+                        description: enabled activates cosign signature verification.
+                        type: boolean
+                      keylessIssuer:
+                        description: |-
+                          keylessIssuer is the OIDC issuer for keyless (Fulcio) verification.
+                          Required when publicKey is empty and enabled is true.
+                        type: string
+                      publicKey:
+                        description: |-
+                          publicKey is a PEM-encoded cosign public key for key-based verification.
+                          When empty, keyless verification is used (requires keylessIssuer).
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                  sbomGate:
+                    description: |-
+                      sbomGate requires a Software Bill of Materials (SBOM) to be attached
+                      as an OCI referrer before allowing sync. Supports SPDX and CycloneDX formats.
+                    properties:
+                      enabled:
+                        description: enabled activates SBOM gate checking.
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
+                  vulnerabilityGate:
+                    description: vulnerabilityGate configures vulnerability severity
+                      gating.
+                    properties:
+                      enabled:
+                        description: enabled activates vulnerability gate checking.
+                        type: boolean
+                      maxSeverity:
+                        default: critical
+                        description: |-
+                          maxSeverity is the highest severity level allowed. Images with findings
+                          at or above this level are blocked from syncing.
+                        enum:
+                        - critical
+                        - high
+                        - medium
+                        - low
+                        type: string
+                      requireCveReport:
+                        default: true
+                        description: |-
+                          requireCveReport, when true (default), blocks sync if no SARIF vulnerability
+                          report is found attached to the source image. When false, images without
+                          reports are allowed through.
+                        type: boolean
+                    required:
+                    - enabled
+                    - maxSeverity
+                    type: object
+                type: object
             required:
             - destination
             - images
@@ -259,6 +324,15 @@ spec:
                             description: tag is the image tag that was synced (e.g.,
                               "latest", "1.22").
                             type: string
+                          validationError:
+                            description: validationError contains the validation failure
+                              reason, if any.
+                            type: string
+                          verified:
+                            description: |-
+                              verified indicates whether pre-sync validation passed for this tag.
+                              Only meaningful when validation is configured.
+                            type: boolean
                         required:
                         - synced
                         - tag

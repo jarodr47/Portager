@@ -5,10 +5,6 @@ ARG TARGETARCH
 
 WORKDIR /workspace
 
-# Trust corporate root CA for TLS in corporate network
-COPY corp-root-ca.crt /usr/local/share/ca-certificates/corp-root-ca.crt
-RUN update-ca-certificates
-
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum

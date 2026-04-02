@@ -225,7 +225,6 @@ spec:
     authSecretRef:                  # Optional: for private source registries (secret-based auth)
       name: source-creds
       namespace: default           # Optional: defaults to ImageSync namespace
-    authMethod: gar                # Optional: "gar" for Google Artifact Registry (ADC/Workload Identity)
   destination:
     registry: 123456789012.dkr.ecr.us-east-1.amazonaws.com
     auth:

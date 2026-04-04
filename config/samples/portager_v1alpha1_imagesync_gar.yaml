@@ -1,0 +1,27 @@
+apiVersion: portager.portager.io/v1alpha1
+kind: ImageSync
+metadata:
+  labels:
+    app.kubernetes.io/name: portage
+    app.kubernetes.io/managed-by: kustomize
+  name: imagesync-gar-sample
+  namespace: default
+spec:
+  schedule: "@every 6h"
+  source:
+    # Pull from a private GAR repository using Workload Identity (ADC).
+    registry: us-central1-docker.pkg.dev/my-project/source-repo
+  destination:
+    # Push to a GAR repository using Workload Identity (ADC).
+    registry: us-central1-docker.pkg.dev/my-project/mirror
+    auth:
+      method: gar
+    # repositoryPrefix: ""  # images land directly under mirror/
+  images:
+    - name: myapp
+      tags:
+        - "latest"
+        - "v1.0"
+    - name: myservice
+      semver: "^2.0.0"   # auto-discover the 10 newest 2.x releases
+      maxTags: 5

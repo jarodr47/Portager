@@ -91,6 +91,19 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+# GAR_REGISTRY is the GAR repository path used for GAR e2e tests.
+# Format: {region}-docker.pkg.dev/{project}/{repository}
+# The repository must already exist and ADC credentials must be configured.
+GAR_REGISTRY ?= us-central1-docker.pkg.dev/my-project/portager-e2e-test
+
+.PHONY: test-e2e-gar
+test-e2e-gar: ## Run GAR e2e tests (requires ADC credentials and a pre-existing GAR repository)
+	GAR_REGISTRY=$(GAR_REGISTRY) go test -tags=e2e_gar ./internal/controller/ -v -run TestGAR_E2E
+
+.PHONY: cleanup-e2e-gar
+cleanup-e2e-gar: ## Clean up images created by GAR e2e tests
+	GAR_REGISTRY=$(GAR_REGISTRY) go test -tags=e2e_gar ./internal/controller/ -v -run TestGAR_E2E_Cleanup
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	"$(GOLANGCI_LINT)" run

@@ -71,10 +71,13 @@ spec:
                         description: |-
                           method specifies the authentication strategy.
                           "secret" uses a dockerconfigjson Secret; "ecr" uses IRSA for AWS ECR;
-                          "anonymous" explicitly disables authentication for public/local registries.
+                          "gar" uses Application Default Credentials / GKE Workload Identity for
+                          Google Artifact Registry; "anonymous" explicitly disables authentication
+                          for public/local registries.
                         enum:
                         - secret
                         - ecr
+                        - gar
                         - anonymous
                         type: string
                       secretRef:
@@ -157,7 +160,7 @@ spec:
                   authSecretRef:
                     description: |-
                       authSecretRef references a kubernetes.io/dockerconfigjson Secret for pull authentication.
-                      Omit for public registries.
+                      Omit for public registries
                     properties:
                       name:
                         description: name of the Secret

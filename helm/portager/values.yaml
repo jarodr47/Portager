@@ -27,6 +27,8 @@ serviceAccount:
   annotations: {}
   # For EKS IRSA:
   # eks.amazonaws.com/role-arn: arn:aws:iam::role/portager-ecr-role
+  # For GKE Workload Identity (method: gar):
+  # iam.gke.io/gcp-service-account: portager@my-project.iam.gserviceaccount.com
 
 aws:
   # For non-EKS clusters: inject AWS credentials as env vars

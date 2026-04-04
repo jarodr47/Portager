@@ -12,11 +12,11 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 
 ## Current Status
 
-**Version:** v0.3.0
+**Version:** v0.4.0
 
 ### Implemented (Phases 0-4, 6 + Tier 1 + CR.1)
 - CRD types, reconciler, full sync loop
-- Secret-based auth, anonymous auth, ECR auth (IRSA)
+- Secret-based auth, anonymous auth, ECR auth (IRSA), GAR auth (Workload Identity / ADC)
 - Digest comparison, per-image status, Kubernetes Events
 - Cron scheduling with RequeueAfter, sync-now annotation
 - ECR repo auto-creation
@@ -100,7 +100,8 @@ make helm-template    # Render Helm templates locally
 │   │   ├── authenticator.go       #   Authenticator interface
 │   │   ├── anonymous.go           #   Public registries (authn.Anonymous)
 │   │   ├── secret.go              #   dockerconfigjson Secret-based auth
-│   │   └── ecr.go                 #   AWS ECR via IRSA / GetAuthorizationToken
+│   │   ├── ecr.go                 #   AWS ECR via IRSA / GetAuthorizationToken
+│   │   └── gar.go                 #   Google Artifact Registry via ADC / Workload Identity
 │   ├── metrics/                   # Prometheus metrics (portage_* custom metrics)
 │   ├── registry/                  # Registry operations (ECR repo auto-creation)
 │   ├── schedule/                  # Cron parsing via robfig/cron/v3
@@ -114,7 +115,7 @@ make helm-template    # Render Helm templates locally
 │       ├── vulnerability.go       #   SARIF-based vulnerability severity gating
 │       └── sbom.go                #   SBOM existence gate (SPDX + CycloneDX)
 ├── config/                        # Kustomize manifests (CRDs, RBAC, manager)
-├── helm/portager/                 # Helm chart (v0.3.0)
+├── helm/portager/                 # Helm chart (v0.4.0)
 ├── test/e2e/                      # E2E tests (Kind + Ginkgo)
 ├── docs/
 │   ├── CONFIGURATION.md           # Helm values, auth strategies, spec reference

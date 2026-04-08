@@ -71,14 +71,14 @@ jobs:
           cosign sign --yes ${images}
 
       - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@17ae1740179002c89186b61233e0f892c3118b11 # v0.23.0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           image: ghcr.io/${{ github.repository_owner }}/portager@${{ steps.build-push.outputs.digest }}
           format: spdx-json
           output-file: sbom-spdx.json
 
       - name: Generate CycloneDX SBOM
-        uses: anchore/sbom-action@17ae1740179002c89186b61233e0f892c3118b11 # v0.23.0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           image: ghcr.io/${{ github.repository_owner }}/portager@${{ steps.build-push.outputs.digest }}
           format: cyclonedx-json

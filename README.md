@@ -12,7 +12,8 @@
   <a href="#quick-start">Quick Start</a> &bull;
   <a href="docs/CONFIGURATION.md">Configuration</a> &bull;
   <a href="docs/DEPLOY_README.md">Deploy Guide</a> &bull;
-  <a href="docs/CONFIGURATION.md#metrics">Metrics</a>
+  <a href="docs/CONFIGURATION.md#metrics">Metrics</a> &bull;
+  <a href="https://buymeacoffee.com/jarodr47">Buy Me a Coffee</a>
 </p>
 
 ---

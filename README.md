@@ -66,6 +66,7 @@ Portager fills this gap with a Kubernetes-native, GitOps-friendly approach that 
 - **Cron scheduling** — Standard cron expressions, shorthands like `@every 6h`, and on-demand sync via annotation
 - **Semver tag filtering** — Auto-discover tags matching semver constraints like `1.x`, `~1.22.0`, or `^22.0.0` instead of listing every tag
 - **Pre-sync validation** — Optional cosign signature verification, vulnerability severity gating (SARIF), and SBOM existence checks before copying
+- **Private PKI** — Trust registries signed by an internal CA by mounting a bundle from a Secret or ConfigMap, with an air-gapped mode that trusts only your CA
 - **Observable** — Per-image status on the resource, Kubernetes Events, and custom Prometheus metrics
 
 ## Installation
@@ -79,7 +80,7 @@ Portager fills this gap with a Kubernetes-native, GitOps-friendly approach that 
 
 ```bash
 helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
-  --version 0.4.0 -n portager-system --create-namespace
+  --version 0.5.0 -n portager-system --create-namespace
 ```
 
 <details>

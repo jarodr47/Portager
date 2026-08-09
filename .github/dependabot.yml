@@ -1,16 +1,70 @@
 version: 2
 updates:
+  # Grouping keeps routine weekly churn to a handful of PRs instead of one per
+  # dependency. Major bumps are deliberately excluded from every group so they
+  # still arrive as individual PRs that get reviewed on their own merits.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+    # The default limit of 5 jammed this repo for four months: five grouped or
+    # major PRs sitting unmerged blocked every newer update from being opened
+    # at all. Raised so a stalled PR can't silently stop dependency reporting.
+    open-pull-requests-limit: 10
+    groups:
+      # Groups are matched in order, so the specific sets come before the
+      # catch-all. The k8s libraries in particular must move together or the
+      # build breaks on mismatched apimachinery types.
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+        update-types:
+          - minor
+          - patch
+      sigstore:
+        patterns:
+          - "github.com/sigstore/*"
+          - "github.com/theupdateframework/*"
+          - "github.com/in-toto/*"
+        update-types:
+          - minor
+          - patch
+      aws-sdk:
+        patterns:
+          - "github.com/aws/aws-sdk-go-v2*"
+          - "github.com/aws/smithy-go"
+        update-types:
+          - minor
+          - patch
+      go-modules:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    groups:
+      docker:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch

@@ -447,6 +447,28 @@ spec:
     authSecretRef:
       name: chainguard-pull-secret
 ```
+
+**Registries signed by an internal CA:**
+
+Authentication and TLS trust are separate problems. If the registry presents a certificate signed by
+your own CA rather than a public one, credentials alone are not enough — Portager will fail with
+`x509: certificate signed by unknown authority` before it ever authenticates.
+
+```bash
+kubectl create configmap org-ca -n portager-system --from-file=ca.crt=/path/to/ca.crt
+
+helm upgrade portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portager-system --reuse-values \
+  --set caBundle.enabled=true \
+  --set caBundle.existingConfigMap=org-ca
+```
+
+This applies to every ImageSync in the cluster and covers registry traffic, AWS STS/ECR, Google token
+endpoints, and Sigstore. For air-gapped installs, `caBundle.mode=replace` trusts only your CA and makes
+public registries unreachable by construction. See
+[Custom CA Certificates](CONFIGURATION.md#custom-ca-certificates) for the full reference, including the
+pod restart required to pick up a rotated bundle.
+
 ---
 
 ## Pre-Sync Validation

@@ -12,9 +12,9 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 
 ## Current Status
 
-**Version:** v0.4.0
+**Version:** v0.5.0
 
-### Implemented (Phases 0-4, 6 + Tier 1 + CR.1)
+### Implemented
 - CRD types, reconciler, full sync loop
 - Secret-based auth, anonymous auth, ECR auth (IRSA), GAR auth (Workload Identity / ADC)
 - Digest comparison, per-image status, Kubernetes Events
@@ -25,6 +25,9 @@ Portager is a Kubernetes operator that declaratively syncs container images betw
 - Supply chain security: all GitHub Actions pinned to commit SHAs, cosign keyless image signing on tagged releases, SBOM generation (SPDX + CycloneDX) attached as OCI attestations, SLSA provenance via `provenance: mode=max`, Dependabot for automated dependency updates
 - Pre-sync validation gates: cosign signature verification (key-based and keyless), vulnerability severity gating via OCI attestation SARIF reports, SBOM existence gate (SPDX + CycloneDX)
 - Semver tag filtering: auto-discover tags matching semver constraints (wildcards, ranges, tilde, caret) with configurable maxTags limit
+- Helm chart hardening: PodDisruptionBudget, affinity/anti-affinity/topology spread, priority class, startup probe, configurable termination grace period, extraEnv/extraVolumes/extraVolumeMounts
+- Network security: NetworkPolicy support in the Helm chart, explicit `anonymous` auth method
+- Custom CA trust for private registries (`caBundle` Helm values): mounts a PEM bundle from a Secret, ConfigMap, or inline string and points Go's trust store at it via `SSL_CERT_DIR`/`SSL_CERT_FILE`. `append` mode unions with the public roots; `replace` mode trusts only the supplied CA. Applied at the process level, so it covers registry traffic, AWS STS/ECR, Google token endpoints, and Sigstore uniformly with no per-resource configuration.
 
 ### Not Implemented
 
@@ -74,7 +77,9 @@ spec:
 
 ### Known Issues
 - Helm chart doesn't support `aws.credentials.sessionToken`
-- golangci-lint reports 6 warnings (ginkgolinter, goconst, gocyclo, modernize, staticcheck x2)
+- golangci-lint reports 16 issues (ginkgolinter 1, goconst 1, gocyclo 1, modernize 9, staticcheck 4). None are functional and `lint` is not wired into CI. The 9 modernize hits are `new(expr)` suggestions in test helpers that appeared when the `go` directive moved to 1.26; two staticcheck entries are deprecations introduced by dependency bumps — `scheme.Builder` (controller-runtime 0.24) and `fulcioroots`, which upstream now redirects to `sigstore-go/pkg/tuf`.
+- `internal/controller/verify/cosign.go` never sets `co.RegistryClientOpts`, so cosign falls back to its default keychain and can only verify images in registries that allow anonymous manifest reads. Tracked in issue #64.
+- `config/manager/manager.yaml` lacks the writable `/tmp` emptyDir and `TUF_ROOT` that the Helm chart sets, so keyless cosign verification does not work under `make deploy`. Tracked in issue #65.
 
 ## Quick Reference
 
@@ -115,7 +120,7 @@ make helm-template    # Render Helm templates locally
 │       ├── vulnerability.go       #   SARIF-based vulnerability severity gating
 │       └── sbom.go                #   SBOM existence gate (SPDX + CycloneDX)
 ├── config/                        # Kustomize manifests (CRDs, RBAC, manager)
-├── helm/portager/                 # Helm chart (v0.4.0)
+├── helm/portager/                 # Helm chart (v0.5.0)
 ├── test/e2e/                      # E2E tests (Kind + Ginkgo)
 ├── docs/
 │   ├── CONFIGURATION.md           # Helm values, auth strategies, spec reference
@@ -133,15 +138,18 @@ make helm-template    # Render Helm templates locally
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| Go | 1.25 | Language |
-| controller-runtime | 0.23.1 | Kubernetes controller framework |
-| go-containerregistry | 0.21.1 | OCI image operations (crane) |
+| Go | 1.26 | Language (`go` directive is 1.26.0; Dockerfile builder is `golang:1.26`) |
+| controller-runtime | 0.24.1 | Kubernetes controller framework |
+| k8s.io/api, apimachinery, client-go | 0.36.3 | Kubernetes API types and client |
+| go-containerregistry | 0.21.9 | OCI image operations (crane) |
 | aws-sdk-go-v2 | latest | ECR auth + repo creation |
 | robfig/cron/v3 | 3.0.1 | Cron expression parsing |
-| Masterminds/semver/v3 | 3.4.0 | Semver constraint parsing and matching |
-| sigstore/cosign/v2 | 2.6.2 | Cosign signature verification |
-| Ginkgo v2 / Gomega | 2.27+ | Testing framework |
+| Masterminds/semver/v3 | 3.5.0 | Semver constraint parsing and matching |
+| sigstore/cosign/v2 | 2.6.5 | Cosign signature verification |
+| Ginkgo v2 / Gomega | 2.32+ / 1.40+ | Testing framework |
 | Kubebuilder | 4.12.0 | Scaffolding (go.kubebuilder.io/v4) |
+
+Run `go list -m -f '{{.Version}}' <module>` rather than trusting this table — it has drifted before.
 
 ## Image Path Mapping
 
@@ -258,3 +266,7 @@ All GitHub Actions are pinned to full commit SHAs (not floating tags) for supply
 - **Session tokens** — The Helm chart's `aws.credentials` values don't include `sessionToken`. For SSO/temporary creds, inject `AWS_SESSION_TOKEN` via `kubectl set env` after install.
 - **golangci-lint** — Uses v2 config format (`.golangci.yml` with `version: "2"`). The `logcheck` plugin is NOT available as a built-in; don't add it back.
 - **ServiceMonitor CRD** — The `config/default/kustomization.yaml` has `- ../prometheus` commented out. Uncommenting it requires Prometheus Operator CRDs to be installed first or `make deploy` will fail.
+- **Go version moves in two places** — The `go` directive in `go.mod` and the builder image in `Dockerfile` must stay compatible. A `k8s.io` minor bump can raise the directive on its own (0.36 pushed it to 1.26.0), and CI picks it up automatically via `go-version-file: go.mod`.
+- **Chart version is not derived from the git tag** — `build-push.yml` runs `helm package helm/portager/`, which reads `Chart.yaml`. Tagging a release without bumping `Chart.yaml` republishes the previous chart version with new content, silently overwriting it in the OCI registry.
+- **Custom CA on macOS** — Go's darwin root loader ignores `SSL_CERT_DIR`/`SSL_CERT_FILE`, so `caBundle` behavior cannot be tested locally on a Mac. Verify in a Linux container or in-cluster.
+- **Dependabot PR cap** — `open-pull-requests-limit` is set to 10 for gomod and github-actions. The default of 5 previously jammed the queue for four months, silently blocking every newer update from being proposed.

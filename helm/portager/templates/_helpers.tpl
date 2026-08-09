@@ -65,3 +65,54 @@ Container image reference.
 {{- $tag := .Values.image.tag | default .Chart.AppVersion }}
 {{- printf "%s:%s" .Values.image.repository $tag }}
 {{- end }}
+
+{{/*
+Fail fast on an ambiguous or incomplete caBundle configuration. Rendering a
+Deployment that silently ignores a misconfigured CA is far worse than refusing
+to render, because the failure would otherwise surface as an x509 error at the
+first sync, long after install.
+*/}}
+{{- define "portager.caBundle.validate" -}}
+{{- if .Values.caBundle.enabled -}}
+{{- $sources := list -}}
+{{- if .Values.caBundle.existingSecret }}{{- $sources = append $sources "existingSecret" -}}{{- end -}}
+{{- if .Values.caBundle.existingConfigMap }}{{- $sources = append $sources "existingConfigMap" -}}{{- end -}}
+{{- if .Values.caBundle.inline }}{{- $sources = append $sources "inline" -}}{{- end -}}
+{{- if eq (len $sources) 0 -}}
+{{- fail "caBundle.enabled is true but no source is set. Set exactly one of caBundle.existingSecret, caBundle.existingConfigMap, or caBundle.inline." -}}
+{{- end -}}
+{{- if gt (len $sources) 1 -}}
+{{- fail (printf "caBundle accepts exactly one source, but %d were set: %s" (len $sources) (join ", " $sources)) -}}
+{{- end -}}
+{{- if not (has .Values.caBundle.mode (list "append" "replace")) -}}
+{{- fail (printf "caBundle.mode must be \"append\" or \"replace\", got %q" (toString .Values.caBundle.mode)) -}}
+{{- end -}}
+{{- if not .Values.caBundle.key -}}
+{{- fail "caBundle.key must not be empty." -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+The CA bundle volume. Only the configured key is projected, so unrelated keys in
+the source object (a tls.key alongside tls.crt, for instance) never land in the
+certificate directory where Go would try to parse them.
+*/}}
+{{- define "portager.caBundle.volume" -}}
+- name: ca-bundle
+  {{- if .Values.caBundle.existingSecret }}
+  secret:
+    secretName: {{ .Values.caBundle.existingSecret }}
+    defaultMode: 0444
+    items:
+      - key: {{ .Values.caBundle.key }}
+        path: {{ .Values.caBundle.key }}
+  {{- else }}
+  configMap:
+    name: {{ if .Values.caBundle.existingConfigMap }}{{ .Values.caBundle.existingConfigMap }}{{ else }}{{ include "portager.fullname" . }}-ca-bundle{{ end }}
+    defaultMode: 0444
+    items:
+      - key: {{ .Values.caBundle.key }}
+        path: {{ .Values.caBundle.key }}
+  {{- end }}
+{{- end }}

@@ -40,6 +40,13 @@ For deployment walkthroughs, see the [Deploy Guide](DEPLOY_README.md). For a pro
 | `extraEnv` | `[]` | Additional environment variables for the controller container |
 | `extraVolumes` | `[]` | Additional volumes for the controller pod |
 | `extraVolumeMounts` | `[]` | Additional volume mounts for the controller container |
+| `caBundle.enabled` | `false` | Trust a custom CA for registries with internally-signed certificates |
+| `caBundle.existingSecret` | `""` | Name of an existing Secret holding the PEM bundle |
+| `caBundle.existingConfigMap` | `""` | Name of an existing ConfigMap holding the PEM bundle (e.g. a trust-manager Bundle target) |
+| `caBundle.inline` | `""` | Inline PEM bundle; the chart creates a ConfigMap from it |
+| `caBundle.key` | `ca.crt` | Key within the Secret/ConfigMap holding the PEM bundle |
+| `caBundle.mountPath` | `/etc/portager/ca` | Where the bundle is mounted in the controller |
+| `caBundle.mode` | `append` | `append` trusts the CA in addition to public roots; `replace` trusts only this CA |
 | `podDisruptionBudget.enabled` | `false` | Enable PodDisruptionBudget for the controller |
 | `podDisruptionBudget.minAvailable` | `1` | Minimum available pods during disruption |
 | `startupProbe.enabled` | `false` | Enable startup probe (httpGet /healthz:8081, 5min budget) |
@@ -208,6 +215,78 @@ helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
   --set extraVolumeMounts[0].mountPath=/var/secrets/google \
   --set extraVolumeMounts[0].readOnly=true
 ```
+
+---
+
+## Custom CA Certificates
+
+If your registry presents a certificate signed by an internal CA — common in air-gapped, federal, and
+enterprise environments — Portager will fail with `x509: certificate signed by unknown authority` until
+that CA is trusted.
+
+The `caBundle` values mount a PEM bundle into the controller and point Go's trust store at it. This
+covers **every** outbound connection: registries, AWS STS/ECR, Google token endpoints, and the Sigstore
+TUF/Fulcio/Rekor endpoints used by keyless cosign verification.
+
+### From an existing ConfigMap (recommended)
+
+CA certificates are public data, so a ConfigMap is the natural home. If you use
+[trust-manager](https://cert-manager.io/docs/trust/trust-manager/), your org bundle is already
+distributed as one:
+
+```bash
+helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portager-system --create-namespace \
+  --set caBundle.enabled=true \
+  --set caBundle.existingConfigMap=org-ca-bundle
+```
+
+### From an existing Secret
+
+```bash
+kubectl create configmap org-ca-bundle -n portager-system --from-file=ca.crt=/path/to/ca.crt
+# or, if the bundle must live in a Secret:
+kubectl create secret generic org-ca-bundle -n portager-system --from-file=ca.crt=/path/to/ca.crt
+
+helm install portager oci://ghcr.io/jarodr47/portager/charts/portager \
+  -n portager-system --create-namespace \
+  --set caBundle.enabled=true \
+  --set caBundle.existingSecret=org-ca-bundle
+```
+
+The object must live in the same namespace as the controller. Only `caBundle.key` (default `ca.crt`) is
+projected into the mount, so other keys in the object are ignored.
+
+### Trust modes
+
+| Mode | Behavior | Use when |
+|------|----------|----------|
+| `append` (default) | Trusts your CA **in addition to** the public roots | Mixed environments — mirroring from Docker Hub or GHCR into an internal registry |
+| `replace` | Trusts **only** your CA | Fully air-gapped, where reaching a public registry should be impossible by construction |
+
+`replace` will break public registries and public Sigstore verification. That is the point of it — it
+makes "this operator can only talk to our infrastructure" a property of the deployment rather than a
+policy anyone has to enforce.
+
+### Rotation requires a pod restart
+
+Go builds its trust store once at process start, so replacing the CA in a Secret or ConfigMap does not
+affect a running controller. Restart it:
+
+```bash
+kubectl rollout restart deploy/portager-controller-manager -n portager-system
+```
+
+When you use `caBundle.inline`, the chart adds a `checksum/ca-bundle` pod annotation so `helm upgrade`
+rolls the pods for you.
+
+> **Warning: do not set `AWS_CA_BUNDLE` for this.** Unlike `SSL_CERT_DIR`, the AWS SDK's `AWS_CA_BUNDLE`
+> **replaces** the trust store rather than adding to it, so pointing it at only your internal CA breaks
+> STS and ECR against real AWS endpoints. `caBundle` already covers AWS traffic.
+
+> **Note on keyless cosign.** Verification against a **private** Fulcio/Rekor also needs the Sigstore
+> client pointed at your instance (`TUF_MIRROR` and related `SIGSTORE_*` variables via `extraEnv`).
+> `caBundle` makes the TLS handshake succeed; it does not redirect which Sigstore instance is used.
 
 ---
 

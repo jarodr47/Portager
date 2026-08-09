@@ -96,6 +96,45 @@ extraVolumeMounts: []
   # - name: tmp
   #   mountPath: /tmp
 
+# -- Custom CA certificates for private registries
+#
+# Mounts a PEM-encoded CA bundle into the controller and points Go's trust store
+# at it, so Portager can talk to registries whose certificates are signed by an
+# internal CA. Applies to every outbound connection — registries, AWS STS/ECR,
+# Google token endpoints, and the Sigstore TUF/Fulcio/Rekor endpoints used by
+# keyless cosign verification.
+#
+# Note: Go builds its trust store once at startup, so rotating the CA requires a
+# pod restart. When `inline` is used the chart adds a checksum annotation that
+# rolls the pods automatically.
+
+caBundle:
+  enabled: false
+
+  # Exactly one source must be set when enabled.
+  # existingSecret / existingConfigMap reference an object you already manage —
+  # for example a trust-manager Bundle target, which is a ConfigMap.
+  existingSecret: ""
+  existingConfigMap: ""
+  # inline creates a ConfigMap from a PEM string supplied here.
+  inline: ""
+  #   inline: |
+  #     -----BEGIN CERTIFICATE-----
+  #     ...
+  #     -----END CERTIFICATE-----
+
+  # Key within the Secret/ConfigMap holding the PEM bundle. The default matches
+  # cert-manager Certificate Secrets, trust-manager Bundles, and kube-root-ca.crt.
+  key: ca.crt
+
+  mountPath: /etc/portager/ca
+
+  # append  — trust this CA IN ADDITION to the public roots. Safe default; keeps
+  #           Docker Hub, GHCR, ECR and friends working.
+  # replace — trust ONLY this CA. Public registries and public Sigstore endpoints
+  #           will stop working. Intended for fully air-gapped installs.
+  mode: append
+
 # -- Disruption and probes
 
 podDisruptionBudget:

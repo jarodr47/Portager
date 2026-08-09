@@ -1,3 +1,4 @@
+{{- include "portager.caBundle.validate" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -12,9 +13,16 @@ spec:
       {{- include "portager.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      {{- $caChecksum := and .Values.caBundle.enabled .Values.caBundle.inline }}
+      {{- if or .Values.podAnnotations $caChecksum }}
       annotations:
+        {{- if $caChecksum }}
+        # Go loads its trust store once at startup, so a changed CA needs a new pod.
+        checksum/ca-bundle: {{ .Values.caBundle.inline | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       labels:
         {{- include "portager.selectorLabels" . | nindent 8 }}
@@ -67,6 +75,23 @@ spec:
           env:
             - name: TUF_ROOT
               value: /tmp/.sigstore
+            {{- if .Values.caBundle.enabled }}
+            {{- if eq .Values.caBundle.mode "replace" }}
+            # Trust ONLY the supplied CA. SSL_CERT_FILE replaces the default file
+            # list and SSL_CERT_DIR the default directory list; setting both is
+            # what excludes the system roots entirely.
+            - name: SSL_CERT_FILE
+              value: {{ printf "%s/%s" .Values.caBundle.mountPath .Values.caBundle.key | quote }}
+            - name: SSL_CERT_DIR
+              value: {{ .Values.caBundle.mountPath | quote }}
+            {{- else }}
+            # Go unions the certificates found across every directory in
+            # SSL_CERT_DIR, so listing the system path alongside ours appends
+            # the private CA to the public roots rather than replacing them.
+            - name: SSL_CERT_DIR
+              value: {{ printf "/etc/ssl/certs:%s" .Values.caBundle.mountPath | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.aws.credentials.enabled }}
             - name: AWS_ACCESS_KEY_ID
               value: {{ .Values.aws.credentials.accessKeyId | quote }}
@@ -109,6 +134,11 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.caBundle.enabled }}
+            - name: ca-bundle
+              mountPath: {{ .Values.caBundle.mountPath | quote }}
+              readOnly: true
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -116,6 +146,9 @@ spec:
         - name: tmp
           emptyDir:
             medium: Memory
+        {{- if .Values.caBundle.enabled }}
+        {{- include "portager.caBundle.volume" . | nindent 8 }}
+        {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

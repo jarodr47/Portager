@@ -1,0 +1,12 @@
+{{- if and .Values.caBundle.enabled .Values.caBundle.inline }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "portager.fullname" . }}-ca-bundle
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "portager.labels" . | nindent 4 }}
+data:
+  {{ .Values.caBundle.key }}: |
+    {{- .Values.caBundle.inline | nindent 4 }}
+{{- end }}

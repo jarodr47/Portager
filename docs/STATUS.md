@@ -55,7 +55,8 @@ Slack/webhook notifications.
   regression from any change. CI reads green only because `trivy.yml` triggers on push/PR and nothing
   has pushed to main since 09 AUG; the next push turns it red. The pending Dependabot batch should
   clear most of it.
-- **Dependabot has requeued**: PRs #82–#88 as of 12 OCT 2026. Grouping is working (they arrive as group
+- **Dependabot has requeued**: 5 PRs open as of 12 OCT 2026 — #82 kubernetes group, #83 go-modules
+  group, #85 sigstore, #86 actions group, #88 aws-sdk group. Grouping is working (they arrive as group
   PRs, not one per dependency), but the batch needs triage — and it is now the fix for the Trivy
   failure above, not just hygiene.
 - **Epic #69** (custom CA / private trust) — layer 1 shipped in v0.5.0. Remaining: #61 transport

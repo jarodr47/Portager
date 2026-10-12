@@ -40,7 +40,11 @@ bin/
 # OS files
 .DS_Store
 
+# Maintainer-local docs — intentionally not published
 docs/spec.md
 docs/CODE_WALKTHROUGH.md
 docs/SECURITY_POSTURE.md
 docs/ROADMAP.md
+
+# Claude Code working files — skills, handoff, local settings
+.claude/

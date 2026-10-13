@@ -31,7 +31,7 @@ and the controller handles digest comparison, copying, validation gates and stat
 
 1. Branch for every change. Never commit to `main`.
 2. `make test` after each layer of change, not just at the end.
-3. Before handing anything over: `make test`, `make test-e2e` (Kind), `make lint` (baseline 17 — don't
+3. Before handing anything over: `make test`, `make test-e2e` (Kind), `make lint` (baseline 20 — don't
    add to it), `make helm-lint`, and a Trivy scan.
 4. Leave changes uncommitted unless asked. Commit, push, merge and tagging are the maintainer's.
 5. Run the `checkpoint` skill when context runs low, then `/clear`.

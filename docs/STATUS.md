@@ -50,15 +50,24 @@ Slack/webhook notifications.
 
 ## Open threads
 
-- **Trivy fails with 17 HIGH as of 12 OCT 2026** — all in the Go binary (`golang.org/x/net`,
-  `x/crypto`, `x/mod`, stdlib), none in the Debian base. This is dependency drift since v0.5.0, not a
-  regression from any change. CI reads green only because `trivy.yml` triggers on push/PR and nothing
-  has pushed to main since 09 AUG; the next push turns it red. The pending Dependabot batch should
-  clear most of it.
-- **Dependabot has requeued**: 5 PRs open as of 12 OCT 2026 — #82 kubernetes group, #83 go-modules
-  group, #85 sigstore, #86 actions group, #88 aws-sdk group. Grouping is working (they arrive as group
-  PRs, not one per dependency), but the batch needs triage — and it is now the fix for the Trivy
-  failure above, not just hygiene.
+- **Trivy is clean as of 12 OCT 2026** — 0 CRITICAL/HIGH in both the Debian base and the Go binary,
+  down from 17 HIGH. Cleared on `chore/dependabot-oct` by the consolidated Dependabot batch plus three
+  bumps past what Dependabot proposed. Note `trivy.yml` triggers only on push to main and PRs
+  targeting main, so a green branch build does not mean Trivy ran.
+- **Dependabot batch consolidated, not merged yet.** All 5 group PRs (#82 kubernetes, #83 go-modules,
+  #85 sigstore, #86 actions, #88 aws-sdk) are applied as separate commits on `chore/dependabot-oct`,
+  stacked on `chore/docs-restructure` (PR #89). Merging #89 first, then this, closes all five.
+
+  Two things learned worth keeping:
+
+  **No single group PR could ever have gone green.** Each bumps only its own group, so the HIGH
+  findings in the other groups' modules remained and Trivy failed on all five. They had to land
+  together.
+
+  **Dependabot's pinned versions go stale.** The PRs were opened 09–16 SEP; by 12 OCT five HIGH
+  findings had fixes newer than what they proposed (x/mod 0.41.0 vs 0.39.0, x/net 0.60.0 vs 0.58.0,
+  grpc 1.83.2 — never proposed at all). Applying the batch verbatim is not the same as clearing
+  Trivy; rescan after.
 - **Epic #69** (custom CA / private trust) — layer 1 shipped in v0.5.0. Remaining: #61 transport
   package, #62 per-resource `tls.caProvider`, #63 threading it through the validation gates.
 - **Tier 4 e2e coverage** is the recurring blocker. It is why the custom CA feature needed

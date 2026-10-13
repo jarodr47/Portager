@@ -17,13 +17,13 @@ make helm-template                   # render the chart locally
 
 | Dependency | Version | Notes |
 |---|---|---|
-| Go | 1.26 directive, `golang:1.26` builder | local toolchain may be newer; see the lint note below |
-| controller-runtime | 0.24.1 | |
-| k8s.io api / apimachinery / client-go | 0.36.3 | a minor bump here can raise the `go` directive |
-| go-containerregistry | 0.21.9 | crane, the copy path |
+| Go | 1.27 directive, `golang:1.27` builder | local toolchain may be newer; see the lint note below |
+| controller-runtime | 0.25.0 | |
+| k8s.io api / apimachinery / client-go | 0.37.0 | a minor bump here can raise the `go` directive |
+| go-containerregistry | 0.22.1 | crane, the copy path |
 | sigstore/cosign/v2 | 2.6.5 | |
 | Masterminds/semver/v3 | 3.5.0 | |
-| Ginkgo / Gomega | 2.32+ / 1.40+ | |
+| Ginkgo / Gomega | 2.32+ / 1.43+ | |
 | Kubebuilder | 4.12.0 | scaffolding, `go.kubebuilder.io/v4` |
 
 Verify with `go list -m -f '{{.Version}}' <module>` rather than trusting this table — it has drifted
@@ -31,13 +31,26 @@ before.
 
 ## Lint
 
-Baseline is **17 findings**: ginkgolinter 1, goconst 3, gocyclo 1, modernize 8, staticcheck 4. All are
-cosmetic or deprecation notices; none are functional. Lint is **not** wired into any CI workflow, so
-nothing is gated on it — but a change should not add to the count.
+Baseline is **20 findings** as `make lint` reports them: ginkgolinter 1, goconst 3, gocyclo 1,
+modernize 11, staticcheck 4. All are cosmetic or deprecation notices; none are functional. Lint is
+**not** wired into any CI workflow, so nothing is gated on it — but a change should not add to the
+count.
 
-- The 8 modernize hits are `new(expr)` suggestions in test helpers, which appeared when the `go`
-  directive moved to 1.26.
-- Two staticcheck entries are dependency-driven deprecations: `scheme.Builder` (controller-runtime 0.24)
+**That 20 is a capped number.** golangci-lint defaults to `max-same-issues: 3`, so a check that fires
+many times is reported three times. Uncapped the count is **30**:
+
+```bash
+./bin/golangci-lint run --max-same-issues 0 --max-issues-per-linter 0
+```
+
+Compare like with like — a capped count against a capped count — or a bump looks smaller than it is.
+
+- The modernize hits are `new(expr)` and `embedlit` suggestions in test helpers. They track the `go`
+  directive: 8 at 1.26, 21 at 1.27 (3 of them shown under the default cap). Moving the directive adds
+  findings with no code change at all, which is why the baseline moved 17 → 20 on the Go 1.27 bump.
+  The `embedlit` autofix rewrites ~82 lines of `imagesync_controller_test.go` into Go 1.27-only
+  elided-literal syntax; it was left unapplied as out of scope.
+- Two staticcheck entries are dependency-driven deprecations: `scheme.Builder` (controller-runtime 0.25)
   and `fulcioroots`, which upstream redirects to `sigstore-go/pkg/tuf`.
 
 **The version is pinned in two places** and they must move together: `GOLANGCI_LINT_VERSION` in the
@@ -119,7 +132,7 @@ gated on `startsWith(github.ref, 'refs/tags/v')`. A release happens when a `v*` 
 often newer than the directive, so verify under the CI toolchain before handing over:
 
 ```bash
-GOTOOLCHAIN=go1.26.0 go mod tidy && git diff --exit-code go.mod go.sum
+GOTOOLCHAIN=go1.27.0 go mod tidy && git diff --exit-code go.mod go.sum
 ```
 
 This has caught real CI-breaking drift twice, including `go get` leaving a module tagged `// indirect`

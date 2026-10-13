@@ -133,10 +133,8 @@ var _ = Describe("ImageSync Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, imagesync)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &portagerv1alpha1.ImageSync{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
+					Name:      resourceName,
+					Namespace: "default",
 					Spec: portagerv1alpha1.ImageSyncSpec{
 						Schedule: "@every 1h",
 						Source: portagerv1alpha1.SourceConfig{
@@ -233,10 +231,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -281,10 +277,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -328,10 +322,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -373,12 +365,10 @@ var _ = Describe("ImageSync Controller", func() {
 
 			// Set nextSyncTime far in the future, but add the sync-now annotation.
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-					Annotations: map[string]string{
-						SyncNowAnnotation: "true",
-					},
+				Name:      resourceName,
+				Namespace: "default",
+				Annotations: map[string]string{
+					SyncNowAnnotation: "true",
 				},
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
@@ -425,10 +415,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -467,10 +455,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "cgr.dev/my-org"},
@@ -509,10 +495,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -565,10 +549,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "not-a-valid-cron",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -610,10 +592,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -659,10 +639,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -705,10 +683,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},
@@ -746,10 +722,8 @@ var _ = Describe("ImageSync Controller", func() {
 			nn := types.NamespacedName{Name: resourceName, Namespace: "default"}
 
 			resource := &portagerv1alpha1.ImageSync{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: "default",
-				},
+				Name:      resourceName,
+				Namespace: "default",
 				Spec: portagerv1alpha1.ImageSyncSpec{
 					Schedule: "@every 1h",
 					Source:   portagerv1alpha1.SourceConfig{Registry: "fake-registry.invalid"},

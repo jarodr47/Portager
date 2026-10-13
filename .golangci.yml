@@ -30,6 +30,10 @@ linters:
     modernize:
       disable:
         - omitzero
+    goconst:
+      # Table-driven tests repeat the same literals by design. Without this,
+      # goconst reports ~32 findings in _test.go files alone.
+      ignore-tests: true
   exclusions:
     generated: lax
     rules:

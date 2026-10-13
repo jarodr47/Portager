@@ -31,25 +31,25 @@ before.
 
 ## Lint
 
-Baseline is **20 findings** as `make lint` reports them: ginkgolinter 1, goconst 3, gocyclo 1,
-modernize 11, staticcheck 4. All are cosmetic or deprecation notices; none are functional. Lint is
-**not** wired into any CI workflow, so nothing is gated on it — but a change should not add to the
-count.
+Baseline is **17 findings**: ginkgolinter 1, goconst 3, gocyclo 1, modernize 8, staticcheck 4. All are
+cosmetic or deprecation notices; none are functional. Lint is **not** wired into any CI workflow, so
+nothing is gated on it — but a change should not add to the count.
 
-**That 20 is a capped number.** golangci-lint defaults to `max-same-issues: 3`, so a check that fires
-many times is reported three times. Uncapped the count is **30**:
+Capped and uncapped agree at 17. They do not always: golangci-lint defaults to `max-same-issues: 3`,
+so a check firing many times is reported only three times. When a count looks like it moved, check
+both before believing the delta:
 
 ```bash
 ./bin/golangci-lint run --max-same-issues 0 --max-issues-per-linter 0
 ```
 
-Compare like with like — a capped count against a capped count — or a bump looks smaller than it is.
-
-- The modernize hits are `new(expr)` and `embedlit` suggestions in test helpers. They track the `go`
-  directive: 8 at 1.26, 21 at 1.27 (3 of them shown under the default cap). Moving the directive adds
-  findings with no code change at all, which is why the baseline moved 17 → 20 on the Go 1.27 bump.
-  The `embedlit` autofix rewrites ~82 lines of `imagesync_controller_test.go` into Go 1.27-only
-  elided-literal syntax; it was left unapplied as out of scope.
+- The 8 modernize hits are `new(expr)` suggestions in test helpers.
+- **modernize tracks the `go` directive, so the count moves with no code change.** The 1.27 bump added
+  13 `embedlit` findings in `imagesync_controller_test.go` — reported as 3 under the default cap, 21
+  modernize uncapped. They were cleared with `golangci-lint run --fix --enable-only modernize
+  ./internal/controller/`, which rewrites those struct literals into Go 1.27 elided-literal form
+  (`Name:`/`Namespace:` promoted out of `ObjectMeta:`). That syntax does not compile before 1.27, which
+  is fine at a 1.27 directive but means the file cannot be built by an older toolchain.
 - Two staticcheck entries are dependency-driven deprecations: `scheme.Builder` (controller-runtime 0.25)
   and `fulcioroots`, which upstream redirects to `sigstore-go/pkg/tuf`.
 
